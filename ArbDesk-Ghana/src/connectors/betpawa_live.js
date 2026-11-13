@@ -148,9 +148,11 @@ export class BetpawaLiveConnector extends BaseBookmaker {
       }
     }
 
-    // Default to verified pre-match UEFA fixture
     if (!selectionId) {
-      selectionId = 1577115443; // Serbia vs Germany Over 2.5
+      return {
+        code: null,
+        shareUrl: 'https://www.betpawa.com.gh/'
+      };
     }
 
     try {
@@ -185,7 +187,7 @@ export class BetpawaLiveConnector extends BaseBookmaker {
     }
 
     return {
-      code: 'BP-LIVE',
+      code: null,
       shareUrl: 'https://www.betpawa.com.gh/'
     };
   }

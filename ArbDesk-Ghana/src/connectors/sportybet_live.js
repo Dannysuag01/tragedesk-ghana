@@ -68,11 +68,11 @@ export class SportyBetLiveConnector extends BaseBookmaker {
       }
     }
 
-    if (!eventId || !eventId.startsWith('sr:match:')) {
-      eventId = 'sr:match:68931586'; // Default to verified Serbia vs Germany
-      marketId = '18';
-      outcomeId = '13';
-      specifier = 'total=2.5';
+    if (!eventId) {
+      return {
+        code: null,
+        shareUrl: 'https://www.sportybet.com/gh/'
+      };
     }
 
     try {
@@ -112,7 +112,7 @@ export class SportyBetLiveConnector extends BaseBookmaker {
     }
 
     return {
-      code: 'SB-LIVE',
+      code: null,
       shareUrl: 'https://www.sportybet.com/gh/'
     };
   }

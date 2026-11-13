@@ -362,12 +362,19 @@ function renderCards() {
 
             <!-- Booking Code Button -->
             <div class="flex items-center space-x-1.5">
-              <button onclick="event.stopPropagation(); copyCode('${leg1.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
-                <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
-                <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg1.code || 'PENDING'}</span>
-                <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
-              </button>
-              ${leg1.shareUrl ? `
+              ${leg1.code ? `
+                <button onclick="event.stopPropagation(); copyCode('${leg1.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
+                  <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
+                  <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg1.code}</span>
+                  <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
+                </button>
+              ` : `
+                <a href="${leg1.shareUrl || '#'}" target="_blank" onclick="event.stopPropagation();" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm text-[11px] font-bold text-emerald-400">
+                  <span>OPEN BETSLIP</span>
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </a>
+              `}
+              ${leg1.shareUrl && leg1.code ? `
                 <a href="${leg1.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg1.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
                   <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
                 </a>
@@ -399,12 +406,19 @@ function renderCards() {
 
             <!-- Booking Code Button -->
             <div class="flex items-center space-x-1.5">
-              <button onclick="event.stopPropagation(); copyCode('${leg2.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
-                <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
-                <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg2.code || 'PENDING'}</span>
-                <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
-              </button>
-              ${leg2.shareUrl ? `
+              ${leg2.code ? `
+                <button onclick="event.stopPropagation(); copyCode('${leg2.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
+                  <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
+                  <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg2.code}</span>
+                  <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
+                </button>
+              ` : `
+                <a href="${leg2.shareUrl || '#'}" target="_blank" onclick="event.stopPropagation();" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm text-[11px] font-bold text-emerald-400">
+                  <span>OPEN BETSLIP</span>
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </a>
+              `}
+              ${leg2.shareUrl && leg2.code ? `
                 <a href="${leg2.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg2.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
                   <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
                 </a>
