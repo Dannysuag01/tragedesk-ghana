@@ -6,7 +6,7 @@
  */
 
 import { isMatchEqual } from './normalizer.js';
-import { calculate2WayArbitrage } from './calculator.js';
+import { calculate2WayArbitrage, calculate3WayArbitrage } from './calculator.js';
 
 export class ArbDetector {
   /**
@@ -39,56 +39,120 @@ export class ArbDetector {
       const matchMeta = group.meta;
       const comparedBookies = group.bookmakers;
 
-      // Evaluate 2-Way Markets (e.g. Over/Under, Both Teams To Score)
-      for (const marketKey of Object.keys(group.twoWayMarkets)) {
-        const marketData = group.twoWayMarkets[marketKey];
+      // Evaluate all markets (2-Way and 3-Way)
+      const marketsMap = group.markets || group.twoWayMarkets || {};
+      for (const marketKey of Object.keys(marketsMap)) {
+        const marketData = marketsMap[marketKey];
         if (!marketData.outcomes || marketData.outcomes.length < 2) continue;
 
-        // Find highest odds for Outcome 1 and Outcome 2 across all bookies
-        const bestSide1 = this._findBestOdd(marketData.outcomes[0]);
-        const bestSide2 = this._findBestOdd(marketData.outcomes[1]);
+        // 2-Way Markets (Over/Under all lines, BTTS, DNB, Team Totals, Odd/Even)
+        if (marketData.outcomes.length === 2) {
+          const bestSide1 = this._findBestOdd(marketData.outcomes[0]);
+          const bestSide2 = this._findBestOdd(marketData.outcomes[1]);
 
-        if (bestSide1 && bestSide2 && bestSide1.bookmaker !== bestSide2.bookmaker) {
-          const arb = calculate2WayArbitrage(
-            bestSide1.odds,
-            bestSide2.odds,
-            this.defaultBankroll,
-            {
-              bookmaker: bestSide1.bookmaker,
-              selection: marketData.outcomes[0].name,
-              selectionId: bestSide1.selectionId,
-              eventId: bestSide1.eventId,
-              marketId: bestSide1.marketId,
-              specifier: bestSide1.specifier
-            },
-            {
-              bookmaker: bestSide2.bookmaker,
-              selection: marketData.outcomes[1].name,
-              selectionId: bestSide2.selectionId,
-              eventId: bestSide2.eventId,
-              marketId: bestSide2.marketId,
-              specifier: bestSide2.specifier
+          if (bestSide1 && bestSide2 && bestSide1.bookmaker !== bestSide2.bookmaker) {
+            const arb = calculate2WayArbitrage(
+              bestSide1.odds,
+              bestSide2.odds,
+              this.defaultBankroll,
+              {
+                bookmaker: bestSide1.bookmaker,
+                selection: marketData.outcomes[0].name,
+                selectionId: bestSide1.selectionId,
+                eventId: bestSide1.eventId,
+                marketId: bestSide1.marketId,
+                specifier: bestSide1.specifier
+              },
+              {
+                bookmaker: bestSide2.bookmaker,
+                selection: marketData.outcomes[1].name,
+                selectionId: bestSide2.selectionId,
+                eventId: bestSide2.eventId,
+                marketId: bestSide2.marketId,
+                specifier: bestSide2.specifier
+              }
+            );
+
+            if (arb && arb.isArb && arb.marginPct >= this.minMargin && arb.marginPct <= this.maxMargin) {
+              await this._attachBookingCodes(arb.legs, bookers, matchMeta, marketData);
+
+              opportunities.push({
+                id: `${matchMeta.homeTeam}-${matchMeta.awayTeam}-${marketKey}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                match: matchMeta,
+                market: marketData.marketName,
+                line: marketData.line || null,
+                category: matchMeta.sport || 'Football',
+                preMatch: !matchMeta.isLive,
+                isLive: Boolean(matchMeta.isLive),
+                liveClock: matchMeta.liveClock || null,
+                score: matchMeta.score || null,
+                comparedBookies,
+                verifiedAt: Date.now(),
+                ...arb
+              });
             }
-          );
+          }
+        }
 
-          if (arb && arb.isArb && arb.marginPct >= this.minMargin && arb.marginPct <= this.maxMargin) {
-            // Attach booking codes if bookers are provided
-            await this._attachBookingCodes(arb.legs, bookers, matchMeta, marketData);
+        // 3-Way Markets (1X2 Full Time, 1X2 1st Half)
+        else if (marketData.outcomes.length === 3) {
+          const bestSide1 = this._findBestOdd(marketData.outcomes[0]);
+          const bestSide2 = this._findBestOdd(marketData.outcomes[1]);
+          const bestSide3 = this._findBestOdd(marketData.outcomes[2]);
 
-            opportunities.push({
-              id: `${matchMeta.homeTeam}-${matchMeta.awayTeam}-${marketKey}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-              match: matchMeta,
-              market: marketData.marketName,
-              line: marketData.line || null,
-              category: matchMeta.sport || 'Football',
-              preMatch: !matchMeta.isLive,
-              isLive: Boolean(matchMeta.isLive),
-              liveClock: matchMeta.liveClock || null,
-              score: matchMeta.score || null,
-              comparedBookies,
-              verifiedAt: Date.now(),
-              ...arb
-            });
+          if (bestSide1 && bestSide2 && bestSide3) {
+            const uniqueBookies = new Set([bestSide1.bookmaker, bestSide2.bookmaker, bestSide3.bookmaker]);
+            if (uniqueBookies.size >= 2) {
+              const arb = calculate3WayArbitrage(
+                bestSide1.odds,
+                bestSide2.odds,
+                bestSide3.odds,
+                this.defaultBankroll,
+                {
+                  bookmaker: bestSide1.bookmaker,
+                  selection: marketData.outcomes[0].name,
+                  selectionId: bestSide1.selectionId,
+                  eventId: bestSide1.eventId,
+                  marketId: bestSide1.marketId,
+                  specifier: bestSide1.specifier
+                },
+                {
+                  bookmaker: bestSide2.bookmaker,
+                  selection: marketData.outcomes[1].name,
+                  selectionId: bestSide2.selectionId,
+                  eventId: bestSide2.eventId,
+                  marketId: bestSide2.marketId,
+                  specifier: bestSide2.specifier
+                },
+                {
+                  bookmaker: bestSide3.bookmaker,
+                  selection: marketData.outcomes[2].name,
+                  selectionId: bestSide3.selectionId,
+                  eventId: bestSide3.eventId,
+                  marketId: bestSide3.marketId,
+                  specifier: bestSide3.specifier
+                }
+              );
+
+              if (arb && arb.isArb && arb.marginPct >= this.minMargin && arb.marginPct <= this.maxMargin) {
+                await this._attachBookingCodes(arb.legs, bookers, matchMeta, marketData);
+
+                opportunities.push({
+                  id: `${matchMeta.homeTeam}-${matchMeta.awayTeam}-${marketKey}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                  match: matchMeta,
+                  market: marketData.marketName,
+                  line: marketData.line || null,
+                  category: matchMeta.sport || 'Football',
+                  preMatch: !matchMeta.isLive,
+                  isLive: Boolean(matchMeta.isLive),
+                  liveClock: matchMeta.liveClock || null,
+                  score: matchMeta.score || null,
+                  comparedBookies,
+                  verifiedAt: Date.now(),
+                  ...arb
+                });
+              }
+            }
           }
         }
       }
@@ -181,6 +245,7 @@ export class ArbDetector {
               score: match.score || null
             },
             bookmakers: [],
+            markets: {},
             twoWayMarkets: {}
           };
           groups.push(matchedGroup);
@@ -190,43 +255,144 @@ export class ArbDetector {
           matchedGroup.bookmakers.push(bookmakerName);
         }
 
-        // Merge markets
+        // Merge markets dynamically (supports 2-way, 3-way, all lines)
         if (match.markets) {
           for (const m of match.markets) {
-            const key = `${m.type}_${m.line || ''}`;
-            if (!matchedGroup.twoWayMarkets[key]) {
-              matchedGroup.twoWayMarkets[key] = {
+            if (!m.outcomes || m.outcomes.length === 0) continue;
+            const key = `${m.type}_${m.line || ''}`.trim();
+
+            if (!matchedGroup.markets[key]) {
+              matchedGroup.markets[key] = {
                 marketName: m.name,
                 line: m.line,
-                outcomes: [
-                  { name: m.outcomes[0].name, quotes: [] },
-                  { name: m.outcomes[1].name, quotes: [] }
-                ]
+                type: m.type,
+                outcomes: m.outcomes.map(o => ({ name: o.name, quotes: [] }))
               };
+              // Backwards compatibility for tests expecting twoWayMarkets
+              matchedGroup.twoWayMarkets[key] = matchedGroup.markets[key];
             }
 
-            matchedGroup.twoWayMarkets[key].outcomes[0].quotes.push({
-              bookmaker: bookmakerName,
-              odds: m.outcomes[0].odds,
-              selectionId: m.outcomes[0].id,
-              eventId: match.id,
-              marketId: m.id || m.marketId,
-              specifier: m.specifier || null
-            });
+            for (let i = 0; i < m.outcomes.length; i++) {
+              const out = m.outcomes[i];
+              // Match by name or index
+              let targetOut = matchedGroup.markets[key].outcomes.find(to => to.name.toLowerCase() === out.name.toLowerCase());
+              if (!targetOut && matchedGroup.markets[key].outcomes[i]) {
+                targetOut = matchedGroup.markets[key].outcomes[i];
+              }
 
-            matchedGroup.twoWayMarkets[key].outcomes[1].quotes.push({
-              bookmaker: bookmakerName,
-              odds: m.outcomes[1].odds,
-              selectionId: m.outcomes[1].id,
-              eventId: match.id,
-              marketId: m.id || m.marketId,
-              specifier: m.specifier || null
-            });
+              if (targetOut) {
+                targetOut.quotes.push({
+                  bookmaker: bookmakerName,
+                  odds: out.odds,
+                  selectionId: out.id,
+                  eventId: match.id,
+                  marketId: m.id || m.marketId,
+                  specifier: m.specifier || null
+                });
+              }
+            }
           }
         }
       }
     }
 
+    // Generate cross-market synthetic hedges (Double Chance vs 1X2, Asian Handicap vs 1X2)
+    for (const group of groups) {
+      this._generateSyntheticMarkets(group);
+    }
+
     return groups;
+  }
+
+  /**
+   * Generates cross-market synthetic hedges (e.g. Double Chance vs 1X2, Asian Handicap vs 1X2)
+   */
+  _generateSyntheticMarkets(group) {
+    const markets = group.markets;
+
+    // 1. Double Chance vs 1X2 Hedges
+    const m1x2 = Object.values(markets).find(m => m.type === '1x2');
+    const mDc = Object.values(markets).find(m => m.type === 'double_chance');
+
+    if (m1x2 && mDc) {
+      const home1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'home');
+      const draw1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'draw');
+      const away1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'away');
+
+      const dc1X = mDc.outcomes.find(o => o.name?.toUpperCase() === '1X');
+      const dc12 = mDc.outcomes.find(o => o.name?.toUpperCase() === '12');
+      const dcX2 = mDc.outcomes.find(o => o.name?.toUpperCase() === 'X2');
+
+      // A. 1X (Home/Draw) vs Away Win
+      if (dc1X?.quotes?.length > 0 && away1x2?.quotes?.length > 0) {
+        markets['synth_1x_away'] = {
+          marketName: 'Double Chance 1X vs Away Win (Hedge)',
+          line: '1X vs 2',
+          type: 'synth_1x_away',
+          outcomes: [
+            { name: '1X (Home or Draw)', quotes: [...dc1X.quotes] },
+            { name: 'Away (Win)', quotes: [...away1x2.quotes] }
+          ]
+        };
+      }
+
+      // B. X2 (Draw/Away) vs Home Win
+      if (dcX2?.quotes?.length > 0 && home1x2?.quotes?.length > 0) {
+        markets['synth_x2_home'] = {
+          marketName: 'Double Chance X2 vs Home Win (Hedge)',
+          line: 'X2 vs 1',
+          type: 'synth_x2_home',
+          outcomes: [
+            { name: 'X2 (Draw or Away)', quotes: [...dcX2.quotes] },
+            { name: 'Home (Win)', quotes: [...home1x2.quotes] }
+          ]
+        };
+      }
+
+      // C. 12 (Home/Away) vs Draw
+      if (dc12?.quotes?.length > 0 && draw1x2?.quotes?.length > 0) {
+        markets['synth_12_draw'] = {
+          marketName: 'Double Chance 12 vs Draw (Hedge)',
+          line: '12 vs X',
+          type: 'synth_12_draw',
+          outcomes: [
+            { name: '12 (Home or Away)', quotes: [...dc12.quotes] },
+            { name: 'Draw', quotes: [...draw1x2.quotes] }
+          ]
+        };
+      }
+    }
+
+    // 2. Asian Handicap +0.5 vs 1X2
+    const ah05 = Object.values(markets).find(m => m.type === 'asian_handicap_+0.5' || m.type === 'asian_handicap_0.5');
+    if (ah05 && m1x2) {
+      const ahHomePlus = ah05.outcomes.find(o => o.name?.toLowerCase().includes('home'));
+      const ahAwayPlus = ah05.outcomes.find(o => o.name?.toLowerCase().includes('away'));
+      const home1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'home');
+      const away1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'away');
+
+      if (ahHomePlus?.quotes?.length > 0 && away1x2?.quotes?.length > 0) {
+        markets['synth_ah_home_away'] = {
+          marketName: 'Asian Handicap +0.5 vs Away Win (Hedge)',
+          line: 'Home (+0.5) vs Away',
+          type: 'synth_ah_home_away',
+          outcomes: [
+            { name: 'Home (+0.5)', quotes: [...ahHomePlus.quotes] },
+            { name: 'Away (Win)', quotes: [...away1x2.quotes] }
+          ]
+        };
+      }
+      if (ahAwayPlus?.quotes?.length > 0 && home1x2?.quotes?.length > 0) {
+        markets['synth_ah_away_home'] = {
+          marketName: 'Asian Handicap +0.5 vs Home Win (Hedge)',
+          line: 'Away (+0.5) vs Home',
+          type: 'synth_ah_away_home',
+          outcomes: [
+            { name: 'Away (+0.5)', quotes: [...ahAwayPlus.quotes] },
+            { name: 'Home (Win)', quotes: [...home1x2.quotes] }
+          ]
+        };
+      }
+    }
   }
 }

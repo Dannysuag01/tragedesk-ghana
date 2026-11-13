@@ -11,11 +11,12 @@ export const config = {
   // Web Dashboard
   port: process.env.PORT || 3000,
 
-  // Telegram Notifications (Optional)
+  // Telegram Notifications (Pre-configured for @Tragedeskbot)
   telegram: {
-    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
-    chatId: process.env.TELEGRAM_CHAT_ID || '',
-    enabled: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '9246294974:AAH7ccqkW9TcojYdL3xglta-DIRFHpX6EVA',
+    chatId: process.env.TELEGRAM_CHAT_ID || '8798424158',
+    minMarginPct: parseFloat(process.env.TELEGRAM_MIN_MARGIN || '1.0'), // Only alert on >= 1.0% margin to prevent clutter
+    enabled: true
   },
 
   // 5-Second Adaptive Polling Rate

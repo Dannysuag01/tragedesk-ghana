@@ -5,6 +5,7 @@
 
 let allOpportunities = [];
 let currentSport = 'All';
+let currentMarketFilter = 'All';
 let currentTradingMode = 'prematch'; // 'prematch' | 'live'
 let currentModalArbIndex = 0;
 let activeStake = 100; // Single source of truth for total stake
@@ -141,19 +142,18 @@ function updateChipStyling(prefix, activeVal) {
 
 function applyStakeToOpportunities(bankroll) {
   allOpportunities.forEach(arb => {
-    const inv1 = 1 / arb.legs[0].odds;
-    const inv2 = 1 / arb.legs[1].odds;
-    const sumInv = inv1 + inv2;
-
-    let s1 = Math.round((bankroll * (inv1 / sumInv)) * 100) / 100;
-    let s2 = Math.round((bankroll - s1) * 100) / 100;
-
-    arb.legs[0].stake = s1;
-    arb.legs[1].stake = s2;
-
-    const p1 = Math.floor(s1 * arb.legs[0].odds * 100) / 100;
-    const p2 = Math.floor(s2 * arb.legs[1].odds * 100) / 100;
-    const guaranteedPayout = Math.min(p1, p2);
+    const sumInv = arb.legs.reduce((acc, l) => acc + (1 / l.odds), 0);
+    let allocated = 0;
+    arb.legs.forEach((leg, i) => {
+      if (i === arb.legs.length - 1) {
+        leg.stake = Math.round((bankroll - allocated) * 100) / 100;
+      } else {
+        leg.stake = Math.round((bankroll * ((1 / leg.odds) / sumInv)) * 100) / 100;
+        allocated += leg.stake;
+      }
+      leg.payout = Math.floor(leg.stake * leg.odds * 100) / 100;
+    });
+    const guaranteedPayout = Math.min(...arb.legs.map(l => l.payout));
     arb.guaranteedProfit = Math.round((guaranteedPayout - bankroll) * 100) / 100;
     arb.executableRoi = Math.round(((arb.guaranteedProfit / bankroll) * 100) * 100) / 100;
     arb.totalStake = bankroll;
@@ -179,6 +179,19 @@ function setSport(sport) {
       btn.className = 'sport-tab px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500';
     } else {
       btn.className = 'sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50';
+    }
+  });
+  renderCards();
+}
+
+function setMarketFilter(mkt) {
+  currentMarketFilter = mkt;
+  document.querySelectorAll('.market-filter-pill').forEach(btn => {
+    const isSelected = btn.getAttribute('data-market') === mkt;
+    if (isSelected) {
+      btn.className = 'market-filter-pill px-3 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500';
+    } else {
+      btn.className = 'market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50';
     }
   });
   renderCards();
@@ -235,9 +248,20 @@ function renderCards() {
     }
   });
 
-  const filtered = currentSport === 'All' 
+  const sportFiltered = currentSport === 'All' 
     ? modeFiltered 
     : modeFiltered.filter(o => o.category.toLowerCase() === currentSport.toLowerCase());
+
+  const filtered = sportFiltered.filter(o => {
+    if (currentMarketFilter === 'All') return true;
+    const m = (o.market || '').toLowerCase();
+    if (currentMarketFilter === 'handicaps') return m.includes('handicap');
+    if (currentMarketFilter === 'totals') return m.includes('over/under') || m.includes('total');
+    if (currentMarketFilter === 'synthetic') return m.includes('synthetic') || m.includes('hedge');
+    if (currentMarketFilter === '1x2') return m.includes('1x2') || m.includes('double chance');
+    if (currentMarketFilter === 'others') return m.includes('both teams') || m.includes('clean sheet') || m.includes('odd/even') || m.includes('draw no bet');
+    return true;
+  });
 
   if (filtered.length === 0) {
     const isLiveMode = currentTradingMode === 'live';
@@ -248,7 +272,7 @@ function renderCards() {
         </div>
         <h3 class="text-base font-extrabold text-white">${isLiveMode ? '⚡ Active Live In-Play Radar Scanner' : '🛡️ Active Pre-Match Radar Scanner'}</h3>
         <p class="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-          Monitoring <span class="text-white font-bold">SportyBet</span>, <span class="text-white font-bold">Betpawa</span> & <span class="text-white font-bold">1xBet Ghana</span> every 5 seconds.
+          Monitoring <span class="text-white font-bold">SportyBet</span>, <span class="text-white font-bold">Betpawa</span>, <span class="text-white font-bold">1xBet</span>, <span class="text-white font-bold">Soccabet</span> & <span class="text-white font-bold">Betway Ghana</span> across all markets every 5 seconds.
         </p>
         <div class="mt-3 inline-flex items-center space-x-2 px-3 py-1 rounded-full ${isLiveMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-blue-500/10 border-blue-500/30 text-blue-300'} border text-[11px] font-semibold">
           <span class="w-1.5 h-1.5 rounded-full ${isLiveMode ? 'bg-amber-400' : 'bg-blue-400'} animate-ping"></span>
@@ -266,12 +290,6 @@ function renderCards() {
   }
 
   container.innerHTML = filtered.map((arb, index) => {
-    const leg1 = arb.legs[0];
-    const leg2 = arb.legs[1];
-
-    const bookie1Initials = (leg1.bookmaker || 'SB').substring(0, 2).toUpperCase();
-    const bookie2Initials = (leg2.bookmaker || 'SB').substring(0, 2).toUpperCase();
-
     const isLive = Boolean(arb.isLive);
 
     return `
@@ -339,93 +357,75 @@ function renderCards() {
           </div>
         </div>
 
-        <!-- Leg 1 Card -->
-        <div class="mt-3 bg-[#1C263D] border border-gray-800/90 rounded-xl p-3 relative shadow-sm">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-              <span class="w-6 h-6 rounded bg-gray-700/80 font-bold text-[10px] text-gray-200 flex items-center justify-center">${bookie1Initials}</span>
-              <span class="text-xs font-bold text-gray-200">LEG 1 • ${leg1.bookmaker}</span>
-            </div>
-            <span class="odds-badge px-2.5 py-0.5 rounded-full text-xs font-black text-white shadow-sm">
-              @ ${leg1.odds.toFixed(2)}
-            </span>
-          </div>
+        <!-- Multi-Leg Breakdown (Supports 2-Way & 3-Way Arbitrage) -->
+        <div class="mt-3 space-y-2.5">
+          ${arb.legs.map((leg, legIdx) => {
+            const initials = (leg.bookmaker || 'SB').substring(0, 2).toUpperCase();
+            return `
+              <div class="bg-[#1C263D] border border-gray-800/90 rounded-xl p-3 relative shadow-sm">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center space-x-2">
+                    <span class="w-6 h-6 rounded bg-gray-700/80 font-bold text-[10px] text-gray-200 flex items-center justify-center">${initials}</span>
+                    <span class="text-xs font-bold text-gray-200">LEG ${legIdx + 1} • ${leg.bookmaker}</span>
+                  </div>
+                  <span class="odds-badge px-2.5 py-0.5 rounded-full text-xs font-black text-white shadow-sm">
+                    @ ${leg.odds.toFixed(2)}
+                  </span>
+                </div>
 
-          <div class="mt-2.5 flex items-center justify-between">
-            <div>
-              <div class="text-sm font-bold text-white flex items-center">
-                ${leg1.selection}
-                ${leg1.stakeFirst ? '<span class="ml-2 text-[10px] text-amber-300 font-black bg-amber-950/80 border border-amber-600/60 px-1.5 py-0.2 rounded-md">⚡ STAKE FIRST</span>' : ''}
+                <div class="mt-2.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-bold text-white flex items-center">
+                      ${leg.selection}
+                      ${leg.stakeFirst ? '<span class="ml-2 text-[10px] text-amber-300 font-black bg-amber-950/80 border border-amber-600/60 px-1.5 py-0.2 rounded-md">⚡ STAKE FIRST</span>' : ''}
+                    </div>
+                    <div class="text-xs text-gray-400 font-medium mt-0.5">Stake: <span class="text-white font-extrabold text-sm">GHS ${leg.stake.toFixed(2)}</span></div>
+                  </div>
+
+                  <!-- Booking Code or Betslip Direct Button -->
+                  <div class="flex items-center space-x-1.5">
+                    ${leg.code ? `
+                      <button onclick="event.stopPropagation(); copyCode('${leg.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
+                        <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
+                        <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg.code}</span>
+                        <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
+                      </button>
+                    ` : `
+                      <a href="${leg.shareUrl || '#'}" target="_blank" onclick="event.stopPropagation();" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm text-[11px] font-bold text-emerald-400">
+                        <span>OPEN BETSLIP</span>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                      </a>
+                    `}
+                    ${leg.shareUrl && leg.code ? `
+                      <a href="${leg.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+                      </a>
+                    ` : ''}
+                  </div>
+                </div>
               </div>
-              <div class="text-xs text-gray-400 font-medium mt-0.5">Stake: <span class="text-white font-extrabold text-sm">GHS ${leg1.stake.toFixed(2)}</span></div>
-            </div>
-
-            <!-- Booking Code Button -->
-            <div class="flex items-center space-x-1.5">
-              ${leg1.code ? `
-                <button onclick="event.stopPropagation(); copyCode('${leg1.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
-                  <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
-                  <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg1.code}</span>
-                  <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
-                </button>
-              ` : `
-                <a href="${leg1.shareUrl || '#'}" target="_blank" onclick="event.stopPropagation();" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm text-[11px] font-bold text-emerald-400">
-                  <span>OPEN BETSLIP</span>
-                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                </a>
-              `}
-              ${leg1.shareUrl && leg1.code ? `
-                <a href="${leg1.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg1.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
-                  <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
-                </a>
-              ` : ''}
-            </div>
-          </div>
+            `;
+          }).join('')}
         </div>
 
-        <!-- Leg 2 Card -->
-        <div class="mt-2.5 bg-[#1C263D] border border-gray-800/90 rounded-xl p-3 relative shadow-sm">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-              <span class="w-6 h-6 rounded bg-gray-700/80 font-bold text-[10px] text-gray-200 flex items-center justify-center">${bookie2Initials}</span>
-              <span class="text-xs font-bold text-gray-200">LEG 2 • ${leg2.bookmaker}</span>
-            </div>
-            <span class="odds-badge px-2.5 py-0.5 rounded-full text-xs font-black text-white shadow-sm">
-              @ ${leg2.odds.toFixed(2)}
-            </span>
-          </div>
+        <!-- Action Row -->
+        <div class="mt-3.5 pt-3 border-t border-gray-800/80 flex items-center justify-between gap-2">
+          <!-- Direct Calculate Modal Button -->
+          <button onclick="openCalcModal(${index})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/30 transition-all duration-150 cursor-pointer flex items-center space-x-1.5">
+            <i class="fa-solid fa-calculator text-xs"></i>
+            <span>Calculate Stake</span>
+          </button>
 
-          <div class="mt-2.5 flex items-center justify-between">
-            <div>
-              <div class="text-sm font-bold text-white flex items-center">
-                ${leg2.selection}
-                ${leg2.stakeFirst ? '<span class="ml-2 text-[10px] text-amber-300 font-black bg-amber-950/80 border border-amber-600/60 px-1.5 py-0.2 rounded-md">⚡ STAKE FIRST</span>' : ''}
-              </div>
-              <div class="text-xs text-gray-400 font-medium mt-0.5">Stake: <span class="text-white font-extrabold text-sm">GHS ${leg2.stake.toFixed(2)}</span></div>
-            </div>
-
-            <!-- Booking Code Button -->
-            <div class="flex items-center space-x-1.5">
-              ${leg2.code ? `
-                <button onclick="event.stopPropagation(); copyCode('${leg2.code}', this)" class="group flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm">
-                  <span class="text-[10px] text-gray-400 font-bold mr-0.5">CODE</span>
-                  <span class="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300 code-label">${leg2.code}</span>
-                  <i class="fa-regular fa-copy text-xs text-gray-400 group-hover:text-emerald-400 code-icon transition-transform"></i>
-                </button>
-              ` : `
-                <a href="${leg2.shareUrl || '#'}" target="_blank" onclick="event.stopPropagation();" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm text-[11px] font-bold text-emerald-400">
-                  <span>OPEN BETSLIP</span>
-                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                </a>
-              `}
-              ${leg2.shareUrl && leg2.code ? `
-                <a href="${leg2.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg2.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
-                  <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
-                </a>
-              ` : ''}
-            </div>
-          </div>
+          <!-- Copy Tip Button -->
+          <button onclick="event.stopPropagation(); copySingleTip(${index}, this)" class="px-3.5 py-2 bg-gray-800/90 hover:bg-gray-700 active:scale-95 border border-gray-700/80 hover:border-gray-600 rounded-xl text-xs font-bold text-gray-200 hover:text-white flex items-center space-x-1.5 transition-all duration-150 cursor-pointer shadow-sm">
+            <i class="fa-regular fa-copy text-xs"></i>
+            <span>Copy Tip</span>
+          </button>
         </div>
+
+      </div>
+    `;
+  }).join('');
 
         <!-- Action Row -->
         <div class="mt-3.5 pt-3 border-t border-gray-800/80 flex items-center justify-between gap-2">
@@ -476,98 +476,76 @@ function closeCalcModal() {
 }
 
 /**
- * Recalculate Stakes Inside Modal
+ * Recalculate Stakes Inside Modal (Supports 2-Way and 3-Way Arbitrage)
  */
 function recalcModalStakes() {
   const arb = allOpportunities[currentModalArbIndex];
   if (!arb) return;
 
   const totalStake = activeStake;
-  const leg1 = arb.legs[0];
-  const leg2 = arb.legs[1];
+  const sumInv = arb.legs.reduce((acc, l) => acc + (1 / l.odds), 0);
 
-  const inv1 = 1 / leg1.odds;
-  const inv2 = 1 / leg2.odds;
-  const sumInv = inv1 + inv2;
+  let allocated = 0;
+  const legsWithStake = arb.legs.map((leg, idx) => {
+    let stake;
+    if (idx === arb.legs.length - 1) {
+      stake = Math.round((totalStake - allocated) * 100) / 100;
+    } else {
+      stake = Math.round((totalStake * ((1 / leg.odds) / sumInv)) * 100) / 100;
+      allocated += stake;
+    }
+    const payout = Math.floor(stake * leg.odds * 100) / 100;
+    return { ...leg, stake, payout };
+  });
 
-  let s1 = Math.round((totalStake * (inv1 / sumInv)) * 100) / 100;
-  let s2 = Math.round((totalStake - s1) * 100) / 100;
-
-  const p1 = Math.floor(s1 * leg1.odds * 100) / 100;
-  const p2 = Math.floor(s2 * leg2.odds * 100) / 100;
-  const guaranteedPayout = Math.min(p1, p2);
+  const guaranteedPayout = Math.min(...legsWithStake.map(l => l.payout));
   const guaranteedProfit = Math.round((guaranteedPayout - totalStake) * 100) / 100;
   const executableRoi = Math.round(((guaranteedProfit / totalStake) * 100) * 100) / 100;
-
-  const bookie1Initials = (leg1.bookmaker || 'SB').substring(0, 2).toUpperCase();
-  const bookie2Initials = (leg2.bookmaker || 'SB').substring(0, 2).toUpperCase();
 
   const container = document.getElementById('modalLegsContainer');
   if (!container) return;
 
-  container.innerHTML = `
-    <!-- Leg 1 Breakdown (Where to stake, how much, priority) -->
-    <div class="bg-[#1C263D] border ${leg1.stakeFirst ? 'border-amber-500/70 ring-1 ring-amber-500/40' : 'border-gray-800'} rounded-xl p-3.5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-2">
-          <span class="w-6 h-6 rounded bg-gray-700 font-black text-[10px] text-gray-200 flex items-center justify-center">${bookie1Initials}</span>
-          <span class="text-xs font-black text-white tracking-wide">${leg1.bookmaker}</span>
-        </div>
-        ${leg1.stakeFirst ? '<span class="text-[10px] text-amber-300 font-black bg-amber-950 border border-amber-600/70 px-2 py-0.5 rounded-full shadow-sm">⚡ STAKE THIS FIRST</span>' : ''}
-      </div>
-
-      <div class="mt-2.5 flex items-center justify-between">
-        <div>
-          <div class="text-xs text-gray-300 font-semibold">${leg1.selection} @ <span class="text-white font-black">@${leg1.odds.toFixed(2)}</span></div>
-          <div class="text-sm font-black text-emerald-400 mt-1">Stake: GHS ${s1.toFixed(2)}</div>
+  container.innerHTML = legsWithStake.map((leg, legIdx) => {
+    const initials = (leg.bookmaker || 'SB').substring(0, 2).toUpperCase();
+    return `
+      <div class="bg-[#1C263D] border ${leg.stakeFirst ? 'border-amber-500/70 ring-1 ring-amber-500/40' : 'border-gray-800'} rounded-xl p-3.5 shadow-sm">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-6 h-6 rounded bg-gray-700 font-black text-[10px] text-gray-200 flex items-center justify-center">${initials}</span>
+            <span class="text-xs font-black text-white tracking-wide">LEG ${legIdx + 1} • ${leg.bookmaker}</span>
+          </div>
+          ${leg.stakeFirst ? '<span class="text-[10px] text-amber-300 font-black bg-amber-950 border border-amber-600/70 px-2 py-0.5 rounded-full shadow-sm">⚡ STAKE THIS FIRST</span>' : ''}
         </div>
 
-        <div class="flex items-center space-x-1.5">
-          <button onclick="copyCode('${leg1.code}', this)" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 rounded-xl transition-all cursor-pointer">
-            <span class="text-[9px] text-gray-400 font-bold">CODE</span>
-            <span class="text-xs font-mono font-bold text-emerald-400">${leg1.code || 'PENDING'}</span>
-            <i class="fa-regular fa-copy text-xs text-gray-400"></i>
-          </button>
-          ${leg1.shareUrl ? `
-            <a href="${leg1.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg1.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
-              <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
-            </a>
-          ` : ''}
-        </div>
-      </div>
-    </div>
+        <div class="mt-2.5 flex items-center justify-between">
+          <div>
+            <div class="text-xs text-gray-300 font-semibold">${leg.selection} @ <span class="text-white font-black">@${leg.odds.toFixed(2)}</span></div>
+            <div class="text-sm font-black text-emerald-400 mt-1">Stake: GHS ${leg.stake.toFixed(2)}</div>
+          </div>
 
-    <!-- Leg 2 Breakdown (Where to stake, how much, priority) -->
-    <div class="bg-[#1C263D] border ${leg2.stakeFirst ? 'border-amber-500/70 ring-1 ring-amber-500/40' : 'border-gray-800'} rounded-xl p-3.5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-2">
-          <span class="w-6 h-6 rounded bg-gray-700 font-black text-[10px] text-gray-200 flex items-center justify-center">${bookie2Initials}</span>
-          <span class="text-xs font-black text-white tracking-wide">${leg2.bookmaker}</span>
-        </div>
-        ${leg2.stakeFirst ? '<span class="text-[10px] text-amber-300 font-black bg-amber-950 border border-amber-600/70 px-2 py-0.5 rounded-full shadow-sm">⚡ STAKE THIS FIRST</span>' : ''}
-      </div>
-
-      <div class="mt-2.5 flex items-center justify-between">
-        <div>
-          <div class="text-xs text-gray-300 font-semibold">${leg2.selection} @ <span class="text-white font-black">@${leg2.odds.toFixed(2)}</span></div>
-          <div class="text-sm font-black text-emerald-400 mt-1">Stake: GHS ${s2.toFixed(2)}</div>
-        </div>
-
-        <div class="flex items-center space-x-1.5">
-          <button onclick="copyCode('${leg2.code}', this)" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 rounded-xl transition-all cursor-pointer">
-            <span class="text-[9px] text-gray-400 font-bold">CODE</span>
-            <span class="text-xs font-mono font-bold text-emerald-400">${leg2.code || 'PENDING'}</span>
-            <i class="fa-regular fa-copy text-xs text-gray-400"></i>
-          </button>
-          ${leg2.shareUrl ? `
-            <a href="${leg2.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg2.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
-              <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
-            </a>
-          ` : ''}
+          <div class="flex items-center space-x-1.5">
+            ${leg.code ? `
+              <button onclick="copyCode('${leg.code}', this)" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 rounded-xl transition-all cursor-pointer">
+                <span class="text-[9px] text-gray-400 font-bold">CODE</span>
+                <span class="text-xs font-mono font-bold text-emerald-400">${leg.code}</span>
+                <i class="fa-regular fa-copy text-xs text-gray-400"></i>
+              </button>
+            ` : `
+              <a href="${leg.shareUrl || '#'}" target="_blank" onclick="event.stopPropagation();" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-sm text-[11px] font-bold text-emerald-400">
+                <span>OPEN BETSLIP</span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+              </a>
+            `}
+            ${leg.shareUrl && leg.code ? `
+              <a href="${leg.shareUrl}" target="_blank" onclick="event.stopPropagation();" title="Open directly in ${leg.bookmaker}" class="px-2.5 py-1.5 bg-[#0f172a] hover:bg-emerald-950 active:scale-95 border border-gray-700/80 hover:border-emerald-500/50 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center text-gray-400 hover:text-emerald-400">
+                <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+              </a>
+            ` : ''}
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  }).join('');
 
   document.getElementById('modalGuaranteedPayout').innerText = `GHS ${guaranteedPayout.toFixed(2)}`;
   const profitDisplay = guaranteedProfit >= 0 
@@ -627,38 +605,16 @@ function copyModalTip(btn) {
   const arb = allOpportunities[currentModalArbIndex];
   if (!arb) return;
 
-  const totalStake = activeStake;
-  const leg1 = arb.legs[0];
-  const leg2 = arb.legs[1];
-
-  const inv1 = 1 / leg1.odds;
-  const inv2 = 1 / leg2.odds;
-  const sumInv = inv1 + inv2;
-
-  let s1 = Math.round((totalStake * (inv1 / sumInv)) * 100) / 100;
-  let s2 = Math.round((totalStake - s1) * 100) / 100;
-
-  const p1 = Math.floor(s1 * leg1.odds * 100) / 100;
-  const p2 = Math.floor(s2 * leg2.odds * 100) / 100;
-  const profit = Math.round((Math.min(p1, p2) - totalStake) * 100) / 100;
-  const roi = Math.round(((profit / totalStake) * 100) * 100) / 100;
-
-  const text = `#${currentModalArbIndex + 1} ${arb.match.homeTeam} vs ${arb.match.awayTeam}
-📅 ${arb.match.dateStr || 'Today'}
-🏆 ${arb.match.competition || 'Soccer'}
-📋 Market: ${arb.market}${arb.line ? ` | Line: ${arb.line}` : ''}
-🔗 ${arb.comparedBookies ? arb.comparedBookies.join(' vs ') : `${leg1.bookmaker} vs ${leg2.bookmaker}`}
-  • ${leg1.selection}: ${leg1.odds.toFixed(2)} @ ${leg1.bookmaker} → stake GHS ${s1.toFixed(2)}${leg1.code ? ` | code ${leg1.code}` : ''}${leg1.stakeFirst ? ' ✅ stake first' : ''}
-  • ${leg2.selection}: ${leg2.odds.toFixed(2)} @ ${leg2.bookmaker} → stake GHS ${s2.toFixed(2)}${leg2.code ? ` | code ${leg2.code}` : ''}${leg2.stakeFirst ? ' ✅ stake first' : ''}
-💵 Guaranteed profit: GHS ${profit.toFixed(2)} (${roi.toFixed(2)}% executable ROI) | Total Stake: GHS ${totalStake}`;
-
+  const text = formatSingleTip(arb, currentModalArbIndex + 1);
   navigator.clipboard.writeText(text);
 
   if (btn) {
     const textEl = document.getElementById('modalCopyText');
-    const orig = textEl.innerText;
-    textEl.innerText = 'Copied!';
-    setTimeout(() => textEl.innerText = orig, 1500);
+    if (textEl) {
+      const orig = textEl.innerText;
+      textEl.innerText = 'Copied!';
+      setTimeout(() => textEl.innerText = orig, 1500);
+    }
   }
 
   showToast('Execution Plan Copied!');
@@ -831,16 +787,20 @@ function switchTab(tab) {
 }
 
 function formatSingleTip(arb, index) {
-  const leg1 = arb.legs[0];
-  const leg2 = arb.legs[1];
+  const legLines = arb.legs.map(leg => 
+    `  • ${leg.selection}: ${leg.odds.toFixed(2)} @ ${leg.bookmaker} → stake GHS ${leg.stake.toFixed(2)}${leg.code ? ` | code ${leg.code}` : ''}${leg.stakeFirst ? ' ✅ stake first' : ''}`
+  ).join('\n');
+
+  const bookiesStr = arb.comparedBookies 
+    ? arb.comparedBookies.join(' vs ') 
+    : arb.legs.map(l => l.bookmaker).join(' vs ');
 
   return `#${index} ${arb.match.homeTeam} vs ${arb.match.awayTeam}
 📅 ${arb.match.dateStr || 'Today'}
 🏆 ${arb.match.competition || 'Soccer'}
 📋 Market: ${arb.market}${arb.line ? ` | Line: ${arb.line}` : ''}
-🔗 ${arb.comparedBookies ? arb.comparedBookies.join(' vs ') : `${leg1.bookmaker} vs ${leg2.bookmaker}`}
-  • ${leg1.selection}: ${leg1.odds.toFixed(2)} @ ${leg1.bookmaker} → stake GHS ${leg1.stake.toFixed(2)}${leg1.code ? ` | code ${leg1.code}` : ''}${leg1.stakeFirst ? ' ✅ stake first' : ''}
-  • ${leg2.selection}: ${leg2.odds.toFixed(2)} @ ${leg2.bookmaker} → stake GHS ${leg2.stake.toFixed(2)}${leg2.code ? ` | code ${leg2.code}` : ''}${leg2.stakeFirst ? ' ✅ stake first' : ''}
+🔗 ${bookiesStr}
+${legLines}
 💵 Guaranteed profit: GHS ${arb.guaranteedProfit.toFixed(2)} (${arb.executableRoi.toFixed(2)}% executable ROI) | Margin: ${arb.marginPct.toFixed(2)}%`;
 }
 

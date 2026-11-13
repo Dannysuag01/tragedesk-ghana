@@ -9,6 +9,15 @@ const STRIP_WORDS = new Set([
   'united', 'utd', 'city', 'town', 'athletic', 'atletico', 'sporting', 'real'
 ]);
 
+// Common team abbreviations
+const TEAM_ALIASES = {
+  'man': 'manchester',
+  'wolves': 'wolverhampton',
+  'spurs': 'tottenham',
+  'gladbach': 'monchengladbach',
+  'psg': 'paris'
+};
+
 /**
  * Clean and standardize team name
  * @param {string} name 
@@ -21,6 +30,7 @@ export function cleanTeamName(name) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents (é -> e)
     .replace(/[^a-z0-9\s]/g, ' ') // remove special chars
     .split(/\s+/)
+    .map(word => TEAM_ALIASES[word] || word)
     .filter(word => !STRIP_WORDS.has(word) && word.length > 1)
     .join(' ')
     .trim();

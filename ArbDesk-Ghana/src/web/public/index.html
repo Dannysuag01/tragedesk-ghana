@@ -100,12 +100,22 @@
       <button onclick="setSport('Baseball')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Baseball</button>
     </div>
 
+    <!-- Expanded Market Coverage Filter Tabs -->
+    <div class="max-w-2xl mx-auto mt-2 flex space-x-1.5 overflow-x-auto no-scrollbar">
+      <button onclick="setMarketFilter('All')" data-market="All" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500">All Markets</button>
+      <button onclick="setMarketFilter('handicaps')" data-market="handicaps" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Handicaps</button>
+      <button onclick="setMarketFilter('totals')" data-market="totals" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Over/Under Totals</button>
+      <button onclick="setMarketFilter('synthetic')" data-market="synthetic" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">⚡ Synthetic Hedges</button>
+      <button onclick="setMarketFilter('1x2')" data-market="1x2" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">1X2 & Double Chance</button>
+      <button onclick="setMarketFilter('others')" data-market="others" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">BTTS / DNB / Clean Sheet</button>
+    </div>
+
     <!-- Safety & Bookmaker Guarantee Banner -->
     <div class="max-w-2xl mx-auto mt-2.5">
       <div class="flex items-center justify-between text-[11px] text-gray-400 bg-[#121929] border border-gray-800/90 px-3.5 py-1.5 rounded-xl shadow-sm">
         <span class="flex items-center text-emerald-400 font-bold">
           <i class="fa-solid fa-circle-check mr-1.5 text-xs text-emerald-400"></i>
-          SportyBet • Betpawa • 1xBet Ghana (Auto-Polling 5s)
+          SportyBet • Betpawa • 1xBet • Soccabet • Betway (Live Auto-Polling 5s)
         </span>
         <span id="bannerModeText" class="text-blue-300 font-semibold flex items-center">
           <i class="fa-solid fa-shield text-[10px] mr-1"></i> Pre-Match Active

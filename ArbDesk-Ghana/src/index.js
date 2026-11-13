@@ -28,7 +28,7 @@ const seenArbIds = new Set();
 async function runScan() {
   console.log(`\n[${new Date().toLocaleTimeString()}] 🔍 Scanning Ghanaian bookmakers for arbitrage...`);
 
-  // Pulls real-time feeds across SportyBet, Betpawa, Soccabet, and Boltbet
+  // Pulls real-time feeds across SportyBet, Betpawa, 1xBet, Soccabet, and Betway
   const feeds = await liveManager.getLatestFeeds();
 
   const opps = await detector.findOpportunities(feeds, bookers);
@@ -41,8 +41,9 @@ async function runScan() {
     console.log(`--------------------------------------------------`);
     console.log(formatTelegramAlert(arb, i + 1));
 
-    // Send to Telegram if enabled and not already notified
-    if (config.telegram.enabled && !seenArbIds.has(arb.id)) {
+    // Send to Telegram if enabled, margin >= minMarginPct, and not already notified
+    const minMargin = config.telegram.minMarginPct ?? 1.0;
+    if (config.telegram.enabled && arb.marginPct >= minMargin && !seenArbIds.has(arb.id)) {
       seenArbIds.add(arb.id);
       await sendTelegramMessage(
         config.telegram.botToken,
@@ -50,6 +51,11 @@ async function runScan() {
         formatTelegramAlert(arb, i + 1)
       );
     }
+  }
+
+  // Prevent memory leak over prolonged 24/7 uptime
+  if (seenArbIds.size > 500) {
+    seenArbIds.clear();
   }
   console.log(`--------------------------------------------------`);
 }

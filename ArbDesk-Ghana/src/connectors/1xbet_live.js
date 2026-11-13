@@ -54,21 +54,24 @@ export class OneXBetLiveConnector extends BaseBookmaker {
             });
           }
 
-          // 2. Over/Under 2.5 Goals (Group 2 or 17)
-          const over = g.E.find(e => (e.T === 7 || e.T === 9) && e.P === 2.5);
-          const under = g.E.find(e => (e.T === 8 || e.T === 10) && e.P === 2.5);
-          if (over && under) {
-            markets.push({
-              id: '18',
-              type: 'over_under',
-              name: 'Over/Under Goals',
-              line: 'Total 2.5',
-              specifier: 'total=2.5',
-              outcomes: [
-                { id: `${g.CI}_o25`, name: 'Over 2.5', odds: parseFloat(over.C), eventId: String(g.CI) },
-                { id: `${g.CI}_u25`, name: 'Under 2.5', odds: parseFloat(under.C), eventId: String(g.CI) }
-              ]
-            });
+          // 2. Over/Under All Lines (0.5, 1.5, 2.5, 3.5, 4.5, 5.5)
+          const totalLines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+          for (const line of totalLines) {
+            const over = g.E.find(e => (e.T === 7 || e.T === 9) && e.P === line);
+            const under = g.E.find(e => (e.T === 8 || e.T === 10) && e.P === line);
+            if (over && under) {
+              markets.push({
+                id: '18',
+                type: `over_under_${line}`,
+                name: 'Over/Under Goals',
+                line: `Total ${line}`,
+                specifier: `total=${line}`,
+                outcomes: [
+                  { id: `${g.CI}_o${line}`, name: `Over ${line}`, odds: parseFloat(over.C), eventId: String(g.CI) },
+                  { id: `${g.CI}_u${line}`, name: `Under ${line}`, odds: parseFloat(under.C), eventId: String(g.CI) }
+                ]
+              });
+            }
           }
 
           // 3. Both Teams to Score (Group 62, T: 13=Yes, 14=No)
@@ -85,6 +88,44 @@ export class OneXBetLiveConnector extends BaseBookmaker {
                 { id: `${g.CI}_no`, name: 'No', odds: parseFloat(bttsNo.C), eventId: String(g.CI) }
               ]
             });
+          }
+
+          // 4. Double Chance (Group 8, T: 4=1X, 5=12, 6=X2)
+          const dc1X = g.E.find(e => e.T === 4);
+          const dc12 = g.E.find(e => e.T === 5);
+          const dcX2 = g.E.find(e => e.T === 6);
+          if (dc1X && dc12 && dcX2) {
+            markets.push({
+              id: '10',
+              type: 'double_chance',
+              name: 'Double Chance',
+              line: 'Double Chance',
+              outcomes: [
+                { id: `${g.CI}_1x`, name: '1X', odds: parseFloat(dc1X.C), eventId: String(g.CI) },
+                { id: `${g.CI}_12`, name: '12', odds: parseFloat(dc12.C), eventId: String(g.CI) },
+                { id: `${g.CI}_x2`, name: 'X2', odds: parseFloat(dcX2.C), eventId: String(g.CI) }
+              ]
+            });
+          }
+
+          // 5. Asian Handicaps (Group 3, T: 1=Home, 2=Away with e.P)
+          const hcpLines = [-1.5, -0.5, 0.5, 1.5];
+          for (const line of hcpLines) {
+            const h = g.E.find(e => e.G === 3 && e.T === 1 && e.P === line);
+            const a = g.E.find(e => e.G === 3 && e.T === 2 && e.P === -line);
+            if (h && a) {
+              const hKey = line > 0 ? `+${line}` : `${line}`;
+              markets.push({
+                id: '64',
+                type: `asian_handicap_${hKey}`,
+                name: 'Asian Handicap',
+                line: `Handicap ${hKey}`,
+                outcomes: [
+                  { id: `${g.CI}_h${line}`, name: `Home (${hKey})`, odds: parseFloat(h.C), eventId: String(g.CI) },
+                  { id: `${g.CI}_a${-line}`, name: `Away (${-line > 0 ? `+${-line}` : -line})`, odds: parseFloat(a.C), eventId: String(g.CI) }
+                ]
+              });
+            }
           }
         }
 
