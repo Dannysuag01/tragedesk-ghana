@@ -1,0 +1,17 @@
+{
+  "name": "ghana-arb-bot",
+  "version": "1.0.0",
+  "description": "Sports betting arbitrage scanner and booking code generator for Ghana bookmakers",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "dotenv": "^16.4.7"
+  }
+}
+

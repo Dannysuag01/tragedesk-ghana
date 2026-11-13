@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TrageDesk Ghana</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              green: '#10B981',
+              darkGreen: '#064E3B',
+              bg: '#0B0F19',
+              card: '#151D2F',
+              subcard: '#1C263D',
+              border: '#27354F',
+              accent: '#F59E0B'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .odds-badge {
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    }
+    .pulse-live {
+      animation: pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.1); }
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-24">
+
+  <!-- Top App Header -->
+  <header class="sticky top-0 z-30 bg-[#0d1322]/95 backdrop-blur-md border-b border-gray-800/90 px-4 py-3">
+    <div class="max-w-2xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-black text-emerald-400 text-sm shadow-inner">
+          TD
+        </div>
+        <div class="flex items-center space-x-2.5">
+          <h1 class="text-lg font-extrabold text-white tracking-tight">TrageDesk</h1>
+          <span id="activeModeBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
+            <i class="fa-solid fa-shield-halved text-[9px] mr-1 text-blue-400"></i> PRE-MATCH ONLY
+          </span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button id="refreshBtn" onclick="fetchArbs()" class="p-2.5 rounded-xl bg-gray-800/90 hover:bg-gray-700 active:scale-90 border border-gray-700/80 text-gray-300 hover:text-white transition-all duration-150 cursor-pointer shadow-sm" title="Refresh">
+          <i class="fa-solid fa-arrows-rotate text-xs"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Trading Mode Switch: Pre-Match vs Live In-Play -->
+    <div class="max-w-2xl mx-auto mt-2.5">
+      <div class="grid grid-cols-2 p-1 bg-[#121929] border border-gray-800/90 rounded-2xl shadow-inner gap-1">
+        <button id="modePrematchBtn" onclick="setTradingMode('prematch')" class="py-2 rounded-xl font-black text-xs flex items-center justify-center space-x-2 transition-all duration-150 active:scale-95 bg-emerald-600 text-white shadow-md cursor-pointer border border-emerald-500/50">
+          <i class="fa-solid fa-shield-halved text-xs"></i>
+          <span>🛡️ Pre-Match (Zero Risk)</span>
+        </button>
+        <button id="modeLiveBtn" onclick="setTradingMode('live')" class="py-2 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all duration-150 active:scale-95 text-gray-400 hover:text-white cursor-pointer bg-transparent border border-transparent">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+          <span>⚡ Live In-Play (High Yield)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sports Filter Tabs -->
+    <div class="max-w-2xl mx-auto mt-2.5 flex space-x-2 overflow-x-auto no-scrollbar">
+      <button onclick="setSport('All')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">All</button>
+      <button onclick="setSport('Football')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Football</button>
+      <button onclick="setSport('Basketball')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Basketball</button>
+      <button onclick="setSport('Tennis')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Tennis</button>
+      <button onclick="setSport('Baseball')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Baseball</button>
+    </div>
+
+    <!-- Safety & Bookmaker Guarantee Banner -->
+    <div class="max-w-2xl mx-auto mt-2.5">
+      <div class="flex items-center justify-between text-[11px] text-gray-400 bg-[#121929] border border-gray-800/90 px-3.5 py-1.5 rounded-xl shadow-sm">
+        <span class="flex items-center text-emerald-400 font-bold">
+          <i class="fa-solid fa-circle-check mr-1.5 text-xs text-emerald-400"></i>
+          SportyBet • Betpawa • 1xBet Ghana (Auto-Polling 5s)
+        </span>
+        <span id="bannerModeText" class="text-blue-300 font-semibold flex items-center">
+          <i class="fa-solid fa-shield text-[10px] mr-1"></i> Pre-Match Active
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-2xl mx-auto px-4 mt-4 space-y-4">
+
+    <!-- Global Stake Controller -->
+    <div class="bg-[#121929] border border-gray-800/90 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div class="flex items-center space-x-2.5">
+        <span class="text-xs font-bold uppercase tracking-wider text-gray-400">Total Stake:</span>
+        <div class="flex items-center bg-gray-900/90 border border-gray-700 rounded-xl px-2.5 py-1 focus-within:border-emerald-500 transition-colors">
+          <span class="text-xs text-gray-400 mr-1.5 font-bold">GHS</span>
+          <input type="number" id="globalBankroll" value="100" min="1" step="10" oninput="setGlobalStake(this.value)" class="w-24 bg-transparent text-sm font-extrabold text-white focus:outline-none text-right">
+        </div>
+      </div>
+
+      <!-- High-converting preset chips -->
+      <div class="flex items-center space-x-1.5">
+        <button onclick="setGlobalStake(50)" id="stakeBtn-50" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">50</button>
+        <button onclick="setGlobalStake(100)" id="stakeBtn-100" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500">100</button>
+        <button onclick="setGlobalStake(200)" id="stakeBtn-200" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">200</button>
+        <button onclick="setGlobalStake(500)" id="stakeBtn-500" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">500</button>
+        <button onclick="setGlobalStake(1000)" id="stakeBtn-1000" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">1000</button>
+      </div>
+    </div>
+
+    <!-- Live Opportunities Feed -->
+    <div id="arbList" class="space-y-4">
+      <!-- Injected by JavaScript -->
+    </div>
+
+    <!-- Calculator Section (Tab) -->
+    <section id="calculatorSection" class="hidden bg-[#121929] border border-gray-800/90 rounded-2xl p-4 shadow-xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-calculator text-emerald-400"></i>
+          <h2 class="text-sm font-bold text-white">Arbitrage Calculator</h2>
+        </div>
+      </div>
+
+      <!-- Select live match from dropdown (Pops up calculation automatically) -->
+      <div>
+        <label class="text-[11px] text-gray-400 font-bold uppercase tracking-wider block mb-1.5">Select Opportunity</label>
+        <div class="relative">
+          <select id="calcEventSelect" onchange="onSelectOpportunityInCalc(this.value)" class="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:border-emerald-500 cursor-pointer appearance-none">
+            <!-- Populated dynamically -->
+          </select>
+          <i class="fa-solid fa-chevron-down absolute right-3 top-4 text-xs text-gray-400 pointer-events-none"></i>
+        </div>
+      </div>
+
+      <!-- Stake Amount Controller in Calculator Tab -->
+      <div class="bg-[#0c1220] border border-gray-800 rounded-xl p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-gray-400">Stake Amount:</label>
+          <div class="flex items-center bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1 focus-within:border-emerald-500">
+            <span class="text-xs text-gray-400 mr-1.5 font-bold">GHS</span>
+            <input type="number" id="calcStakeInput" value="100" min="1" step="10" oninput="setGlobalStake(this.value)" class="w-24 bg-transparent text-sm font-black text-white focus:outline-none text-right">
+          </div>
+        </div>
+
+        <!-- Chips -->
+        <div class="flex items-center justify-between gap-1.5 pt-1">
+          <button onclick="setGlobalStake(50)" id="calcPill-50" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">50</button>
+          <button onclick="setGlobalStake(100)" id="calcPill-100" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow-sm shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer text-center">100</button>
+          <button onclick="setGlobalStake(200)" id="calcPill-200" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">200</button>
+          <button onclick="setGlobalStake(500)" id="calcPill-500" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">500</button>
+          <button onclick="setGlobalStake(1000)" id="calcPill-1000" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">1000</button>
+        </div>
+      </div>
+
+      <!-- Odds Display -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] text-gray-400 font-bold uppercase tracking-wider block" id="calcLeg1Label">Leg 1 Odds</label>
+          <input type="number" id="calcOdd1" step="0.01" value="2.26" oninput="runManualCalc()" class="w-full mt-1.5 bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-colors">
+        </div>
+        <div>
+          <label class="text-[11px] text-gray-400 font-bold uppercase tracking-wider block" id="calcLeg2Label">Leg 2 Odds</label>
+          <input type="number" id="calcOdd2" step="0.01" value="2.00" oninput="runManualCalc()" class="w-full mt-1.5 bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-colors">
+        </div>
+      </div>
+
+      <!-- Execution Breakdown in Calculator Tab -->
+      <div id="calcResult" class="p-3.5 bg-gray-950 border border-gray-800 rounded-xl space-y-2.5">
+        <!-- Results injected dynamically -->
+      </div>
+
+      <button onclick="openCalcModal(document.getElementById('calcEventSelect').value)" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center space-x-2">
+        <i class="fa-solid fa-up-right-from-square text-xs"></i>
+        <span>Open In Full Modal</span>
+      </button>
+    </section>
+
+  </main>
+
+  <!-- Interactive Opportunity Calculator Popup Modal -->
+  <div id="stakeModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 opacity-0 pointer-events-none transition-all duration-200">
+    <div class="w-full max-w-lg bg-[#151D2F] border border-gray-800 rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto no-scrollbar space-y-4">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between pb-3 border-b border-gray-800">
+        <div>
+          <div class="flex items-center space-x-2">
+            <span id="modalEventBadge" class="w-6 h-6 rounded-md bg-emerald-600 text-white font-black text-xs flex items-center justify-center">#1</span>
+            <h2 id="modalEventTitle" class="text-base font-extrabold text-white">Event Title</h2>
+          </div>
+          <div id="modalEventMeta" class="text-xs text-gray-400 mt-1">League • Market</div>
+        </div>
+        <button onclick="closeCalcModal()" class="w-8 h-8 rounded-full bg-gray-800/80 hover:bg-gray-700 active:scale-90 text-gray-400 hover:text-white flex items-center justify-center transition-all cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Stake Amount Controller -->
+      <div class="bg-[#0c1220] border border-gray-800 rounded-xl p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-gray-400">Total Stake:</label>
+          <div class="flex items-center bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1 focus-within:border-emerald-500">
+            <span class="text-xs text-gray-400 mr-1.5 font-bold">GHS</span>
+            <input type="number" id="modalStakeInput" value="100" min="1" step="10" oninput="setGlobalStake(this.value)" class="w-24 bg-transparent text-sm font-black text-white focus:outline-none text-right">
+          </div>
+        </div>
+
+        <!-- Quick Chips -->
+        <div class="flex items-center justify-between gap-1.5 pt-1">
+          <button onclick="setGlobalStake(50)" id="modalPill-50" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">50</button>
+          <button onclick="setGlobalStake(100)" id="modalPill-100" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow-sm shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer text-center">100</button>
+          <button onclick="setGlobalStake(200)" id="modalPill-200" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">200</button>
+          <button onclick="setGlobalStake(500)" id="modalPill-500" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">500</button>
+          <button onclick="setGlobalStake(1000)" id="modalPill-1000" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">1000</button>
+        </div>
+      </div>
+
+      <!-- Execution Instructions (Where & How much to stake, which first) -->
+      <div class="space-y-2.5" id="modalLegsContainer">
+        <!-- Injected dynamically -->
+      </div>
+
+      <!-- Live Odds Verification Bar -->
+      <div class="px-3 py-2 bg-gray-900/90 border border-gray-800 rounded-xl flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="modalOddsStatus" class="font-bold text-gray-300 text-[11px]">Odds Active & Verified</span>
+        </div>
+        <button onclick="verifyModalOdds(this)" class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 active:scale-95 text-emerald-400 font-extrabold text-[10px] rounded-lg border border-gray-700/80 transition-all cursor-pointer flex items-center space-x-1">
+          <i class="fa-solid fa-arrows-rotate text-[10px]" id="verifySpinIcon"></i>
+          <span id="verifyBtnText">Check Odds</span>
+        </button>
+      </div>
+
+      <!-- Guaranteed Payout & Profit Banner -->
+      <div class="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl flex items-center justify-between text-xs">
+        <div>
+          <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Guaranteed Return</span>
+          <span id="modalGuaranteedPayout" class="text-base font-black text-white">GHS 106.10</span>
+        </div>
+        <div class="text-right">
+          <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Net Profit</span>
+          <span id="modalGuaranteedProfit" class="text-base font-black text-emerald-400">+GHS 6.10 (6.10%)</span>
+        </div>
+      </div>
+
+      <!-- Modal Actions -->
+      <div class="flex items-center space-x-2 pt-1">
+        <button onclick="copyModalTip(this)" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center space-x-2">
+          <i class="fa-regular fa-copy"></i>
+          <span id="modalCopyText">Copy Execution Plan</span>
+        </button>
+        <button onclick="closeCalcModal()" class="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 font-bold text-xs rounded-xl transition-all cursor-pointer">
+          Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="fixed bottom-0 left-0 right-0 z-30 bg-[#0d1322]/95 backdrop-blur-md border-t border-gray-800/90 py-2.5 px-4 shadow-2xl">
+    <div class="max-w-md mx-auto grid grid-cols-3 gap-2 text-center">
+      <button onclick="switchTab('feed')" id="navFeed" class="group flex flex-col items-center py-1.5 rounded-xl transition-all duration-150 cursor-pointer active:scale-90 text-emerald-400">
+        <i class="fa-solid fa-chart-line text-lg group-hover:scale-110 transition-transform"></i>
+        <span class="text-[11px] font-bold mt-1">Opportunities</span>
+      </button>
+
+      <button onclick="switchTab('calculator')" id="navCalc" class="group flex flex-col items-center py-1.5 rounded-xl transition-all duration-150 cursor-pointer active:scale-90 text-gray-400 hover:text-white">
+        <i class="fa-solid fa-calculator text-lg group-hover:scale-110 transition-transform"></i>
+        <span class="text-[11px] font-bold mt-1">Calculator</span>
+      </button>
+
+      <button onclick="copyAllTips(this)" id="exportAllBtn" class="group flex flex-col items-center py-1.5 rounded-xl transition-all duration-150 cursor-pointer active:scale-90 text-gray-400 hover:text-white">
+        <i class="fa-solid fa-copy text-lg group-hover:scale-110 transition-transform"></i>
+        <span class="text-[11px] font-bold mt-1" id="exportAllText">Export All Tips</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Floating Toast Notification -->
+  <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-emerald-600 text-white text-xs font-extrabold rounded-full shadow-2xl transition-all duration-200 opacity-0 pointer-events-none flex items-center space-x-2 border border-emerald-400/40">
+    <i class="fa-solid fa-check"></i>
+    <span id="toastMsg">Copied!</span>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
