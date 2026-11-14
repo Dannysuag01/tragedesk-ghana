@@ -372,7 +372,7 @@ function renderCards() {
 
   const sportFiltered = currentSport === 'All' 
     ? modeFiltered 
-    : modeFiltered.filter(o => (o.category || 'Football').toLowerCase() === currentSport.toLowerCase());
+    : modeFiltered.filter(o => (o.category || o.match?.sport || 'Football').toLowerCase() === currentSport.toLowerCase());
 
   const filtered = sportFiltered.filter(o => {
     if (currentMarketFilter === 'All') return true;
@@ -382,6 +382,7 @@ function renderCards() {
     const t = (o.type || '').toLowerCase();
 
     if (filterLower === '1x2') return m.includes('1x2') || t.includes('1x2');
+    if (filterLower === 'moneyline') return m.includes('moneyline') || m.includes('winner') || t.includes('moneyline');
     if (filterLower === 'over/under') return m.includes('over/under') || l.includes('total') || t.includes('over_under');
     if (filterLower === 'btts') return m.includes('both teams') || m.includes('btts') || t.includes('btts');
     if (filterLower === 'handicap') return m.includes('handicap') || t.includes('handicap');

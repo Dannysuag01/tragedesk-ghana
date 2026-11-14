@@ -31,7 +31,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
    */
   async _fetchEventIds() {
     const endpoints = [
-      `${this.baseUrl}/service-api/LineFeed/GetSportsZip?sports=1&lng=en&tf=10800&tz=0&country=97&gr=176`,
+      `${this.baseUrl}/service-api/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
       `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
       `${this.baseUrl}/LineFeed/GetInformationForSport?sportId=1&lng=en&count=50&isLive=false`
     ];
@@ -136,33 +136,53 @@ export class OneXBetLiveConnector extends BaseBookmaker {
 
     const ci = g.CI;
 
-    // 1. 1X2
+    // 1. 1X2 (3-way) or Moneyline (2-way)
     const h1x2 = g.E.find(e => e.T === 1);
     const d1x2 = g.E.find(e => e.T === 2);
     const a1x2 = g.E.find(e => e.T === 3);
     if (h1x2 && a1x2) {
-      markets.push({
-        id: '1',
-        type: '1x2',
-        name: '1X2',
-        outcomes: [
-          { id: `${ci}_1`, name: 'Home', odds: parseFloat(h1x2.C), eventId: String(ci) },
-          ...(d1x2 ? [{ id: `${ci}_X`, name: 'Draw', odds: parseFloat(d1x2.C), eventId: String(ci) }] : []),
-          { id: `${ci}_2`, name: 'Away', odds: parseFloat(a1x2.C), eventId: String(ci) }
-        ]
-      });
+      if (d1x2) {
+        markets.push({
+          id: '1',
+          type: '1x2',
+          name: '1X2',
+          outcomes: [
+            { id: `${ci}_1`, name: 'Home', odds: parseFloat(h1x2.C), eventId: String(ci) },
+            { id: `${ci}_X`, name: 'Draw', odds: parseFloat(d1x2.C), eventId: String(ci) },
+            { id: `${ci}_2`, name: 'Away', odds: parseFloat(a1x2.C), eventId: String(ci) }
+          ]
+        });
+      } else {
+        markets.push({
+          id: '219',
+          type: 'moneyline',
+          name: 'Moneyline (Winner)',
+          line: 'Head to Head',
+          outcomes: [
+            { id: `${ci}_1`, name: 'Home', odds: parseFloat(h1x2.C), eventId: String(ci) },
+            { id: `${ci}_2`, name: 'Away', odds: parseFloat(a1x2.C), eventId: String(ci) }
+          ]
+        });
+      }
     }
 
-    // 2. Over/Under – full-time (0.5 … 5.5)
-    const totalLines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-    for (const line of totalLines) {
+    // 2. Over/Under - full-time (any total line including Basketball/Tennis)
+    const seenLines = new Set();
+    const candidateLines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+    // Gather all distinct P values from over/under entries
+    for (const e of g.E) {
+      if ((e.T === 7 || e.T === 9) && typeof e.P === 'number') candidateLines.push(e.P);
+    }
+    for (const line of candidateLines) {
+      if (seenLines.has(line)) continue;
+      seenLines.add(line);
       const over  = g.E.find(e => (e.T === 7 || e.T === 9)  && e.P === line);
       const under = g.E.find(e => (e.T === 8 || e.T === 10) && e.P === line);
       if (over && under) {
         markets.push({
           id: '18',
           type: `over_under_${line}`,
-          name: 'Over/Under Goals',
+          name: 'Total Over/Under',
           line: `Total ${line}`,
           specifier: `total=${line}`,
           outcomes: [
@@ -307,9 +327,12 @@ export class OneXBetLiveConnector extends BaseBookmaker {
         const g = data.Value;
         if (!g || !g.O1 || !g.O2) continue;
 
-        // Skip live or already-started matches
+        // Skip live or already-started matches, or matches beyond 7 days
         if (g.IL === true) continue;
-        if (new Date(g.S * 1000).getTime() <= Date.now()) continue;
+        const startMs = g.S ? g.S * 1000 : 0;
+        const nowMs = Date.now();
+        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        if (startMs <= nowMs || startMs > nowMs + SEVEN_DAYS_MS) continue;
 
         // --- 3. Extract markets --------------------------------------------
         const markets = this._extractMarkets(g);
@@ -318,6 +341,8 @@ export class OneXBetLiveConnector extends BaseBookmaker {
         // --- 4 & 5. Build match object -------------------------------------
         const competition = g.LE || g.SE || 'Football';
         const country     = g.CN || 'International';
+        const sportMap    = { 1: 'Football', 2: 'Ice Hockey', 3: 'Basketball', 4: 'Tennis', 10: 'Table Tennis', 11: 'Volleyball', 13: 'Baseball' };
+        const sport       = g.SN || sportMap[g.SI] || 'Football';
         const startTime   = new Date(g.S * 1000).toISOString();
         const dateStr     = new Date(g.S * 1000).toLocaleString('en-GB', {
           day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
@@ -327,7 +352,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
           id: String(g.CI),
           homeTeam: g.O1,
           awayTeam: g.O2,
-          sport: 'Football',
+          sport,
           competition,
           country,
           startTime,

@@ -1,87 +1,101 @@
-# ArbDesk Ghana 🇬🇭 - Sports Betting Arbitrage & Booking Code Bot
+# TrageDesk Ghana 🇬🇭 - Sports Betting Arbitrage & Execution Platform
 
-An automated sports betting arbitrage bot and live dashboard tailored for the Ghanaian betting market (**SportyBet**, **Soccabet**, **Betpawa Ghana**, **Betway Ghana**, and **Boltbet**).
+An automated real-time multi-sport arbitrage scanner and web dashboard tailored for Ghanaian sportsbooks (**SportyBet Ghana**, **Betpawa Ghana**, **1xBet Ghana**, **Soccabet Ghana**, and **Betway Ghana**).
 
-It finds risk-free arbitrage opportunities across bookmakers, calculates guaranteed profit and exact stakes, assigns **"Stake First"** priority to vulnerable legs, and automatically generates **ready-to-use booking codes**.
+TrageDesk detects risk-free arbitrage opportunities across bookmakers with identical rules, calculates guaranteed net profit and exact staking plans, assigns **"⚡ STAKE FIRST"** priority to volatile legs, and sends formatted mobile alerts directly via Telegram.
 
 ---
 
 ## 📸 Key Features
 
-1. **Ghana Bookmaker Focus**: Connectors tailored for SportyBet, Soccabet, Betpawa, Betway, and Boltbet.
-2. **Instant Booking Codes**: Directly interfaces with bookmaker betslip APIs so you can copy and place bets in under 15 seconds before odds move.
-3. **"Stake First" Smart Execution**: Automatically flags the leg with the highest odds/volatility with `✅ stake first` so you don't get trapped if odds shift mid-placement.
-4. **Dynamic Staking**: Adjust your bankroll (e.g. GHS 50, 100, 200, 500) and all stakes, payouts, and profits recalculate in real-time.
-5. **Two-Way Delivery**:
-   - **ArbDesk Mobile & Desktop Web App** (`http://localhost:3000`)
-   - **Automated Telegram Bot Alerts** with 1-click formatted copy
+1. **Ghanaian Sportsbook Integration**: Real-time connectors for SportyBet, Betpawa, 1xBet, Soccabet, and Betway Ghana.
+2. **Multi-Sport Coverage**: Scans pre-match fixtures up to **7 days ahead** across **Football**, **Basketball (NBA/EuroLeague)**, **Tennis**, **Table Tennis**, and **Ice Hockey**.
+3. **Comprehensive Market Coverage**:
+   - 1X2 Full Time & Half Time
+   - 2-Way Moneyline / Winner (Head-to-Head)
+   - Over / Under Total Goals, Points & Games (all lines)
+   - Both Teams To Score (GG/NG)
+   - Asian & European Handicaps / Point Spreads
+   - Double Chance & Draw No Bet
+   - Cross-Market Synthetic Hedges (e.g., Double Chance vs 1X2)
+4. **"⚡ STAKE FIRST" Smart Execution**: Automatically flags the leg with the highest odds/volatility so you never get trapped if odds shift mid-placement.
+5. **Unified Bankroll Controller**: Set your stake (e.g., GHS 50, 100, 200, 500, 1000) and all stakes, payouts, and profits synchronize instantly across the live feed, execution modal, and manual calculator.
+6. **Instant Delivery**:
+   - **TrageDesk Web Dashboard** (`http://localhost:3000` or deployed on Render)
+   - **Automated Telegram Bot Alerts** via `@Tragedeskbot`
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Run the Bot & Web Dashboard
+### 1. Install & Run
 ```bash
-cd "C:\Users\DANNY\.gemini\antigravity\scratch\ghana-arb-bot"
-node src/index.js
+npm install
+npm start
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser or phone.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 2. Run the Verification Tests
+### 2. Run Verification Tests
 ```bash
-node --test test/*.test.js
+npm test
 ```
 
 ---
 
-## 💬 Setting Up Telegram Alerts (Optional)
+## 💬 Telegram Alerts
 
-1. Open Telegram and search for `@BotFather`.
-2. Type `/newbot` and follow the prompts to get your **Bot Token**.
-3. Send a message to your bot or create a channel/group.
-4. Add your credentials to `src/config.js` or set environment variables:
-   ```env
-   TELEGRAM_BOT_TOKEN="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-   TELEGRAM_CHAT_ID="your_chat_or_channel_id"
-   ```
-5. When the bot discovers an arb, you'll receive real-time alerts formatted like:
-   ```text
-   #1 South Africa vs Kenya
-   📅 13 Nov 16:00
-   🏆 Africa Cup Of Nations Qualification
-   📋 Market: 1X2 + Handicap 3-Way | Line: 0:1
-   🔗 Soccabet vs Betpawa Ghana
-     • Home: 1.38 @ Betpawa Ghana → stake GHS 75.27 | code V04D9OZ
-     • Away(0:1): 4.20 @ Soccabet → stake GHS 24.73 | code E8P-743-7 ✅ stake first
-   💵 Guaranteed profit: GHS 3.86 (3.86% executable ROI) | Margin: 3.73%
-   ```
-
----
-
-## 🛠 Project Structure
+Alerts are sent in real-time to your configured chat:
 
 ```text
-ghana-arb-bot/
-├── src/
-│   ├── config.js               # Bankroll, profit thresholds, Telegram tokens
-│   ├── index.js                # App entrypoint and scanner runner
-│   ├── engine/
-│   │   ├── calculator.js       # 2-way & 3-way arb math, pesewa flooring, stakes
-│   │   ├── normalizer.js       # Team name fuzzy matching & fixture grouping
-│   │   └── detector.js         # Cross-bookmaker scanner & code attacher
-│   ├── connectors/
-│   │   ├── base.js             # Base bookmaker interface
-│   │   ├── bookers.js          # SportyBet, Soccabet, Betpawa & Boltbet APIs
-│   │   └── sample_data.js      # Feeds matching Ghana fixtures
-│   ├── delivery/
-│   │   └── telegram.js         # Formats & sends alerts
-│   └── web/
-│       ├── server.js           # Native Node.js HTTP server
-│       └── public/
-│           ├── index.html      # ArbDesk responsive dashboard
-│           └── app.js          # Live stake updater, calculator & copy buttons
-└── test/
-    ├── calculator.test.js      # Verifies math against real screenshots & tips
-    └── normalizer.test.js      # Verifies team normalization
+🎯 ARBITRAGE ALERT (+6.85% ROI)
+━━━━━━━━━━━━━━━━━━━━
+⚽ Arsenal FC vs Chelsea FC
+🏆 League: Premier League
+📅 Kickoff: Today 19:45
+📋 Market: Over/Under Goals • Total 3.5
+
+💵 Staking Plan (GHS 100)
+• Betpawa Ghana: Over 3.5 @ 3.50
+  👉 Stake: GHS 30.29
+  ⚡ STAKE THIS FIRST
+
+• Sportybet: Under 3.5 @ 1.52
+  👉 Stake: GHS 69.71
+
+━━━━━━━━━━━━━━━━━━━━
+💰 Guaranteed Profit: +GHS 5.97 (Risk-Free)
+⚡ TrageDesk Ghana • Real-Time Odds
 ```
 
+---
+
+## 📁 Project Structure
+
+```text
+tragedesk-ghana/
+├── src/
+│   ├── config.js               # Bankroll, profit thresholds, Telegram tokens
+│   ├── index.js                # Main orchestrator & sequential scan loop
+│   ├── engine/
+│   │   ├── calculator.js       # 2-way & 3-way arb math, pesewa flooring, stakes
+│   │   ├── normalizer.js       # Cross-bookmaker matching (demographics, leagues, sports)
+│   │   └── detector.js         # Cross-bookmaker market evaluator & synthetic hedge generator
+│   ├── connectors/
+│   │   ├── base.js             # Base bookmaker interface
+│   │   ├── live_manager.js     # Multi-sport live feed manager with TTL cache
+│   │   ├── sportybet_live.js   # SportyBet Ghana connector
+│   │   ├── betpawa_live.js     # Betpawa Ghana connector
+│   │   ├── 1xbet_live.js       # 1xBet Ghana dynamic bulk connector
+│   │   ├── soccabet_live.js    # Soccabet Ghana connector
+│   │   └── betway_live.js      # Betway Ghana connector
+│   ├── delivery/
+│   │   └── telegram.js         # Formatted Telegram alert delivery
+│   └── web/
+│       ├── server.js           # Production HTTP server with health endpoints
+│       └── public/
+│           ├── index.html      # TrageDesk responsive dashboard UI
+│           └── app.js          # Synchronized frontend controller
+├── test/                       # Comprehensive unit and integration test suite
+├── package.json
+└── render.yaml                 # Render cloud deployment specification
+```

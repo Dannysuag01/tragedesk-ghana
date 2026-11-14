@@ -51,25 +51,66 @@ export class LiveFeedManager {
     const spHeaders = this.connectors['Sportybet'].headers;
     const bpHeaders = this.connectors['Betpawa Ghana'].headers;
 
-    // 1. Fetch real matches from SportyBet
+    const SPORT_CATALOG = [
+      { id: 'sr:sport:1', name: 'Football' },
+      { id: 'sr:sport:2', name: 'Basketball' },
+      { id: 'sr:sport:5', name: 'Tennis' },
+      { id: 'sr:sport:20', name: 'Table Tennis' },
+      { id: 'sr:sport:4', name: 'Ice Hockey' }
+    ];
+
+    // 1. Fetch real matches from SportyBet (up to 7 days / 168 hours across all active sports)
     try {
       let spEvents = this.cachedSportyEvents;
       if (Date.now() - this.lastSportyFetch > 10000 || spEvents.length === 0) {
-        const spRes = await fetch('https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=sr:sport:1', { headers: spHeaders });
-        if (spRes.ok) {
-          const spJson = await spRes.json();
-          spEvents = spJson.data || [];
-          this.cachedSportyEvents = spEvents;
-          this.lastSportyFetch = Date.now();
+        const allFetchedEvents = [];
+        for (const sport of SPORT_CATALOG) {
+          try {
+            // Query SportyBet with 168 hours (7 days) horizon per sport
+            const spRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&timeFrame=168`, {
+              headers: spHeaders,
+              signal: AbortSignal.timeout(6000)
+            });
+            if (spRes.ok) {
+              const spJson = await spRes.json();
+              const evList = (spJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
+              allFetchedEvents.push(...evList);
+            } else {
+              // Fallback to standard upcoming feed if 168h query is not supported
+              const fbRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}`, {
+                headers: spHeaders,
+                signal: AbortSignal.timeout(6000)
+              });
+              if (fbRes.ok) {
+                const fbJson = await fbRes.json();
+                const evList = (fbJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
+                allFetchedEvents.push(...evList);
+              }
+            }
+          } catch (e) {
+            // Silently skip if a single sport times out
+          }
         }
+        spEvents = allFetchedEvents;
+        this.cachedSportyEvents = spEvents;
+        this.lastSportyFetch = Date.now();
       }
 
+      const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+
       for (const ev of spEvents) {
+        // Filter strictly for pre-match within next 7 days
+        if (ev.estimateStartTime) {
+          if (ev.estimateStartTime <= nowMs) continue; // Already started/live
+          if (ev.estimateStartTime > nowMs + SEVEN_DAYS_MS) continue; // Beyond 7 days
+        }
+        const evSport = ev.sport?.name || ev.defaultSport || 'Football';
         const markets = [];
         for (const m of ev.markets || []) {
           const mDesc = (m.desc || m.name || '').toLowerCase();
 
-          // A. 1X2 Full Time
+          // A. 1X2 Full Time (Football, Hockey)
           if (m.id === '1' || mDesc === '1x2') {
             const h = m.outcomes?.find(o => o.desc?.toLowerCase() === 'home' || o.desc?.toLowerCase() === '1');
             const d = m.outcomes?.find(o => o.desc?.toLowerCase() === 'draw' || o.desc?.toLowerCase() === 'x');
@@ -84,6 +125,26 @@ export class LiveFeedManager {
                 outcomes: [
                   { id: h.id, name: 'Home', odds: parseFloat(h.odds) },
                   { id: d.id, name: 'Draw', odds: parseFloat(d.odds) },
+                  { id: a.id, name: 'Away', odds: parseFloat(a.odds) }
+                ]
+              });
+            }
+          }
+
+          // A2. 2-Way Moneyline / Winner (Basketball, Tennis, Table Tennis, Baseball)
+          if (m.id === '219' || m.id === '186' || mDesc === 'winner' || mDesc === '1 2' || mDesc === 'moneyline' || mDesc === 'head to head' || mDesc.includes('winner (incl. overtime)')) {
+            const h = m.outcomes?.find(o => o.desc?.toLowerCase() === 'home' || o.desc?.toLowerCase() === '1');
+            const a = m.outcomes?.find(o => o.desc?.toLowerCase() === 'away' || o.desc?.toLowerCase() === '2');
+            const hasDraw = m.outcomes?.some(o => o.desc?.toLowerCase() === 'draw' || o.desc?.toLowerCase() === 'x');
+            if (h && a && !hasDraw) {
+              markets.push({
+                id: '219',
+                marketId: '219',
+                type: 'moneyline',
+                name: 'Moneyline (Winner)',
+                line: 'Head to Head',
+                outcomes: [
+                  { id: h.id, name: 'Home', odds: parseFloat(h.odds) },
                   { id: a.id, name: 'Away', odds: parseFloat(a.odds) }
                 ]
               });
@@ -420,13 +481,13 @@ export class LiveFeedManager {
           const spCountry = ev.sport?.category?.name;
           const spComp = spTourn
             ? (spCountry && !spTourn.toLowerCase().includes(spCountry.toLowerCase()) ? `${spCountry} - ${spTourn}` : spTourn)
-            : (spCountry || 'Football');
+            : (spCountry || `${evSport} Tournament`);
 
           sportyMatches.push({
             id: ev.eventId,
             homeTeam: ev.homeTeamName,
             awayTeam: ev.awayTeamName,
-            sport: 'Football',
+            sport: evSport,
             competition: spComp,
             country: spCountry,
             startTime: new Date(ev.estimateStartTime).toISOString(),
@@ -455,8 +516,13 @@ export class LiveFeedManager {
                   const candidates = bpSearch.events || [];
 
                   for (const cand of candidates) {
-                    if (cand.category?.name && cand.category.name.toLowerCase() !== 'football') {
-                      continue;
+                    // Match sport category
+                    if (cand.category?.name && evSport) {
+                      const cName = cand.category.name.toLowerCase();
+                      const sName = evSport.toLowerCase();
+                      if (cName !== sName && !cName.includes(sName) && !sName.includes(cName)) {
+                        continue;
+                      }
                     }
 
                     const candP1 = cand.participants?.[0]?.name;
@@ -470,11 +536,12 @@ export class LiveFeedManager {
                     }
                     if (!candHome || !candAway) continue;
 
-                    // Rigorous verification: checks teams, league/competition, gender, kickoff
+                    // Rigorous verification: checks sport, teams, league/competition, gender, kickoff
                     const matches = isMatchEqual(
                       {
                         homeTeam: ev.homeTeamName,
                         awayTeam: ev.awayTeamName,
+                        sport: evSport,
                         competition: spComp,
                         country: spCountry,
                         startTime: new Date(ev.estimateStartTime).toISOString()
@@ -482,6 +549,7 @@ export class LiveFeedManager {
                       {
                         homeTeam: candHome,
                         awayTeam: candAway,
+                        sport: cand.category?.name || evSport,
                         competition: cand.competition?.name,
                         country: cand.region?.name,
                         startTime: cand.startTime
@@ -530,6 +598,34 @@ export class LiveFeedManager {
                         outcomes: [
                           { id: String(hPrice.id), name: 'Home', odds: parseFloat(hPrice.odds) },
                           { id: String(dPrice.id), name: 'Draw', odds: parseFloat(dPrice.odds) },
+                          { id: String(aPrice.id), name: 'Away', odds: parseFloat(aPrice.odds) }
+                        ]
+                      });
+                    }
+                  }
+
+                  // A2. Betpawa 2-Way Moneyline / Winner (Basketball, Tennis, etc.)
+                  const bpWinner = bpFull.markets?.find(bm => {
+                    const n = (bm.marketType?.name || '').toLowerCase();
+                    return n === 'winner' || n === 'head to head' || n === '1 2' || n === 'moneyline' || n.includes('match winner');
+                  });
+                  if (bpWinner) {
+                    let hPrice, aPrice;
+                    for (const r of bpWinner.row || []) {
+                      for (const p of r.prices || []) {
+                        if (p.name === '1' || p.name?.toLowerCase() === 'home') hPrice = p;
+                        if (p.name === '2' || p.name?.toLowerCase() === 'away') aPrice = p;
+                      }
+                    }
+                    if (hPrice && aPrice) {
+                      bpMarkets.push({
+                        id: '2190',
+                        marketId: '2190',
+                        type: 'moneyline',
+                        name: 'Moneyline (Winner)',
+                        line: 'Head to Head',
+                        outcomes: [
+                          { id: String(hPrice.id), name: 'Home', odds: parseFloat(hPrice.odds) },
                           { id: String(aPrice.id), name: 'Away', odds: parseFloat(aPrice.odds) }
                         ]
                       });
@@ -966,7 +1062,7 @@ export class LiveFeedManager {
                       id: bpFull.id || bpEvId,
                       homeTeam: realBpHome,
                       awayTeam: realBpAway,
-                      sport: 'Football',
+                      sport: bpEv.category?.name || evSport,
                       competition: realBpComp,
                       country: bpEv.region?.name || spCountry,
                       startTime: bpFull.startTime || new Date(ev.estimateStartTime).toISOString(),

@@ -201,6 +201,15 @@ export function isCompetitionCompatible(compA = '', compB = '', countryA = '', c
 export function isMatchEqual(fixtureA, fixtureB, threshold = 0.70) {
   if (!fixtureA || !fixtureB) return false;
 
+  // 0. Sport Verification (Reject if both specify different sports)
+  if (fixtureA.sport && fixtureB.sport) {
+    const sA = fixtureA.sport.toLowerCase().trim();
+    const sB = fixtureB.sport.toLowerCase().trim();
+    if (sA !== sB && !sA.includes(sB) && !sB.includes(sA)) {
+      return false;
+    }
+  }
+
   // 1. Kickoff Time Window: Ensure within 2-hour window if both are known
   if (fixtureA.startTime && fixtureB.startTime) {
     const timeA = new Date(fixtureA.startTime).getTime();

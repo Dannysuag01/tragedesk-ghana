@@ -1,19 +1,19 @@
 /**
  * Main Application Orchestrator
  * Starts the Ghana Arbitrage Bot, scans for opportunities,
- * generates booking codes, serves the ArbDesk UI, and sends Telegram alerts.
+ * serves the TrageDesk UI, and sends Telegram alerts.
  */
 
-import { ArbDetector } from './engine/detector.js';
+import { TrageDeskDetector } from './engine/detector.js';
 import { formatTelegramAlert, sendTelegramMessage } from './delivery/telegram.js';
-import { createArbServer } from './web/server.js';
+import { createTrageDeskServer } from './web/server.js';
 import { config } from './config.js';
 import { LiveFeedManager } from './connectors/live_manager.js';
 
 const liveManager = new LiveFeedManager();
 const bookers = liveManager.getBookers();
 
-const detector = new ArbDetector({
+const detector = new TrageDeskDetector({
   minMargin: config.minProfitMarginPct,
   maxMargin: config.maxProfitMarginPct,
   defaultBankroll: config.defaultBankroll
@@ -71,6 +71,8 @@ async function runScan() {
           config.telegram.chatId,
           formatTelegramAlert(arb, i + 1)
         );
+        // Rate-limit buffer between consecutive Telegram alerts
+        await new Promise(resolve => setTimeout(resolve, 400));
       }
     }
 
@@ -84,7 +86,7 @@ async function runScan() {
 }
 
 // 1. Start Web Dashboard immediately so host health checks pass instantly on boot
-const server = createArbServer(() => currentOpportunities, config.port);
+const server = createTrageDeskServer(() => currentOpportunities, config.port);
 await server.start();
 
 console.log(`
@@ -93,7 +95,7 @@ console.log(`
 📱 Web Dashboard: http://localhost:${config.port}
 💬 Telegram Alerts: ${config.telegram.enabled ? 'Enabled' : 'Disabled (Set TELEGRAM_BOT_TOKEN to activate)'}
 💰 Default Bankroll: GHS ${config.defaultBankroll}
-🔁 Scan Interval: every ${(config.pollIntervalMs || 8000) / 1000}s
+🔁 Scan Interval: every ${(config.pollIntervalMs || 5000) / 1000}s
 =====================================================
 `);
 
@@ -105,9 +107,8 @@ async function startScanLoop() {
     } catch (err) {
       console.error('[Scanner] Unexpected error in scan loop:', err.message);
     }
-    await new Promise(resolve => setTimeout(resolve, config.pollIntervalMs || 8000));
+    await new Promise(resolve => setTimeout(resolve, config.pollIntervalMs || 5000));
   }
 }
 
 startScanLoop();
-

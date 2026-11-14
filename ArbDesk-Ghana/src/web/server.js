@@ -1,5 +1,5 @@
 /**
- * Lightweight native Node.js HTTP server for ArbDesk
+ * Lightweight native Node.js HTTP server for TrageDesk
  * Serves static dashboard UI and REST API for opportunities.
  */
 
@@ -21,7 +21,7 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml'
 };
 
-export function createArbServer(getOpportunitiesFn, port = 3000) {
+export function createTrageDeskServer(getOpportunitiesFn, port = 3000) {
   const server = http.createServer(async (req, res) => {
     const host = req.headers.host || 'localhost';
     let pathname = '/';
@@ -30,6 +30,13 @@ export function createArbServer(getOpportunitiesFn, port = 3000) {
       pathname = parsedUrl.pathname;
     } catch {
       pathname = req.url.split('?')[0] || '/';
+    }
+
+    // Health check endpoint for Render / cloud monitoring
+    if (pathname === '/health' || pathname === '/api/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), service: 'TrageDesk Ghana' }));
+      return;
     }
 
     // API Endpoint: /api/opportunities
@@ -49,8 +56,13 @@ export function createArbServer(getOpportunitiesFn, port = 3000) {
       return;
     }
 
-    // Static File Serving
-    let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
+    // Static File Serving with security check
+    let filePath = path.normalize(path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname));
+    if (!filePath.startsWith(PUBLIC_DIR)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('403 Forbidden');
+      return;
+    }
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -74,7 +86,7 @@ export function createArbServer(getOpportunitiesFn, port = 3000) {
     start: () => {
       return new Promise((resolve) => {
         server.listen(port, '0.0.0.0', () => {
-          console.log(`[ArbDesk] Dashboard running at http://0.0.0.0:${port}`);
+          console.log(`[TrageDesk] Dashboard running at http://0.0.0.0:${port}`);
           resolve(server);
         });
       });
@@ -86,4 +98,6 @@ export function createArbServer(getOpportunitiesFn, port = 3000) {
     }
   };
 }
+
+export const createArbServer = createTrageDeskServer;
 

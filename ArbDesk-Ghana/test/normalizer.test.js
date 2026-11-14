@@ -109,3 +109,20 @@ test('accepts matches with compatible league naming', () => {
   assert.strictEqual(isMatchEqual(fixtureA, fixtureB), true);
 });
 
+test('rejects matches when sports differ', () => {
+  const fixtureA = {
+    homeTeam: 'Barcelona',
+    awayTeam: 'Real Madrid',
+    sport: 'Football',
+    startTime: '2026-11-21T17:30:00Z'
+  };
+  const fixtureB = {
+    homeTeam: 'Barcelona',
+    awayTeam: 'Real Madrid',
+    sport: 'Basketball',
+    startTime: '2026-11-21T17:30:00Z'
+  };
+
+  assert.strictEqual(isMatchEqual(fixtureA, fixtureB), false);
+});
+

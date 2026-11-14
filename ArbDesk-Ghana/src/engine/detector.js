@@ -8,7 +8,7 @@
 import { isMatchEqual } from './normalizer.js';
 import { calculate2WayArbitrage, calculate3WayArbitrage } from './calculator.js';
 
-export class ArbDetector {
+export class TrageDeskDetector {
   /**
    * @param {Object} [options]
    * @param {number} [options.minMargin=1.0] - Minimum margin percentage (e.g. 1.0%)
@@ -399,3 +399,5 @@ export class ArbDetector {
     }
   }
 }
+
+export const ArbDetector = TrageDeskDetector;

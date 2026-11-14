@@ -43,6 +43,9 @@ export function formatTelegramAlert(arb, arbIndex = 1) {
   const marketName = escapeHtml(market);
   const lineStr = line ? ` • <i>${escapeHtml(line)}</i>` : '';
 
+  const sport = (match.sport || arb.category || 'Football').toLowerCase();
+  const sportIcon = sport.includes('basket') ? '🏀' : sport.includes('tennis') ? '🎾' : sport.includes('hockey') ? '🏒' : '⚽';
+
   const roi = (executableRoi ?? marginPct).toFixed(2);
   const profit = guaranteedProfit.toFixed(2);
 
@@ -57,8 +60,8 @@ export function formatTelegramAlert(arb, arbIndex = 1) {
   }).join('\n\n');
 
   return `🎯 <b>ARBITRAGE ALERT (+${roi}% ROI)</b>
-━━━━━━━━━━━━━━━━━━━━━
-⚽ <b>${home} vs ${away}</b>
+━━━━━━━━━━━━━━━━━━━━
+${sportIcon} <b>${home} vs ${away}</b>
 🏆 <b>League:</b> ${comp}
 📅 <b>Kickoff:</b> ${dateStr}
 📋 <b>Market:</b> ${marketName}${lineStr}
@@ -66,7 +69,7 @@ export function formatTelegramAlert(arb, arbIndex = 1) {
 💵 <b>Staking Plan (${currency} ${totalStake})</b>
 ${legsFormatted}
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 💰 <b>Guaranteed Profit: +${currency} ${profit}</b> (Risk-Free)
 ⚡ <i>TrageDesk Ghana • Real-Time Odds</i>`;
 }

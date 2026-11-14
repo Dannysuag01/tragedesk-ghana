@@ -1,7 +1,7 @@
 {
-  "name": "ghana-arb-bot",
+  "name": "tragedesk-ghana",
   "version": "1.0.0",
-  "description": "Sports betting arbitrage scanner and booking code generator for Ghana bookmakers",
+  "description": "TrageDesk Ghana - Real-Time Multi-Sport Betting Arbitrage Scanner & Dashboard",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
@@ -14,4 +14,3 @@
     "dotenv": "^16.4.7"
   }
 }
-
