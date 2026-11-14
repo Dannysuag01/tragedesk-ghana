@@ -37,6 +37,11 @@ export class LiveFeedManager {
    * @returns {Promise<Array<Object>>}
    */
   async getLatestFeeds() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    console.log(`[LiveFeedManager] Starting feed scan at ${hh}:${mm}:${ss}`);
     console.log('[LiveFeedManager] Polling real-time Ghanaian sportsbook APIs (All Markets)...');
 
     const sportyMatches = [];
@@ -436,9 +441,13 @@ export class LiveFeedManager {
             const teamQuery = cleanHome.split(' ')[0] || (ev.homeTeamName || '').replace(/women|fc|fk|sc|u21|u19/gi, '').trim().split(' ')[0];
             if (teamQuery && teamQuery.length >= 3) {
               const fixtureCacheKey = `${ev.homeTeamName}-${ev.awayTeamName}`.toLowerCase();
-              let bpEv = this.betpawaEventCache.get(fixtureCacheKey);
+              const cached = this.betpawaEventCache.get(fixtureCacheKey);
+              let bpEv;
 
-              if (bpEv === undefined) {
+              const CACHE_TTL_MS = 30 * 60 * 1000;
+              if (cached && (Date.now() - cached.ts < CACHE_TTL_MS)) {
+                bpEv = cached.data;
+              } else {
                 bpEv = null;
                 const bpSearchRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(teamQuery)}`, { headers: bpHeaders });
                 if (bpSearchRes.ok) {
@@ -489,7 +498,7 @@ export class LiveFeedManager {
                     }
                   }
 
-                  this.betpawaEventCache.set(fixtureCacheKey, bpEv);
+                  this.betpawaEventCache.set(fixtureCacheKey, { data: bpEv, ts: Date.now() });
                 }
               }
 

@@ -4,6 +4,7 @@ import { BaseBookmaker } from './base.js';
  * 1xBet Ghana Connector
  * Connects directly to 1xBet Ghana's public pre-match service API
  * Strictly Pre-Match Only (Filters out live fixtures)
+ * Dynamically discovers upcoming football matches via bulk endpoints.
  */
 export class OneXBetLiveConnector extends BaseBookmaker {
   constructor() {
@@ -12,154 +13,357 @@ export class OneXBetLiveConnector extends BaseBookmaker {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': 'application/json, text/plain, */*'
     };
-    this.verifiedGameIds = [376001600, 376001598]; // Serbia vs Germany, Netherlands vs Greece
+
+    // 15-second event-list cache
+    this._cachedEventIds = null;
+    this._cacheTimestamp = 0;
+    this._cacheTTL = 15_000; // ms
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Event-list discovery
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Try the three bulk endpoints in order and return the first successfully
+   * parsed list of game IDs (integers).
+   * @returns {Promise<number[]>}
+   */
+  async _fetchEventIds() {
+    const endpoints = [
+      `${this.baseUrl}/service-api/LineFeed/GetSportsZip?sports=1&lng=en&tf=10800&tz=0&country=97&gr=176`,
+      `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
+      `${this.baseUrl}/LineFeed/GetInformationForSport?sportId=1&lng=en&count=50&isLive=false`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          headers: this.headers,
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!res.ok) continue;
+
+        const data = await res.json();
+        const ids = this._parseEventIds(data);
+        if (ids && ids.length > 0) {
+          return ids;
+        }
+      } catch (err) {
+        console.warn(`[1xBet Ghana] Bulk endpoint failed (${url}):`, err.message);
+      }
+    }
+
+    return [];
   }
 
   /**
-   * Fetches real-time upcoming pre-match fixtures from 1xBet Ghana
+   * Extract game IDs from the varying response structures.
+   * - Flat array: data.Value = [{I: id, ...}, ...]
+   * - Grouped:    data.Value.GC = [{E: [{I: id}], ...}, ...]
+   * - Or data itself is an array of events
+   */
+  _parseEventIds(data) {
+    const ids = [];
+
+    const extractFromEvent = (e) => {
+      if (e && (e.I || e.id)) ids.push(e.I || e.id);
+    };
+
+    try {
+      const val = data.Value;
+
+      if (!val) return ids;
+
+      // Grouped structure: val.GC[].E[].I
+      if (val.GC && Array.isArray(val.GC)) {
+        for (const group of val.GC) {
+          if (Array.isArray(group.E)) {
+            group.E.forEach(extractFromEvent);
+          }
+        }
+        return ids;
+      }
+
+      // Flat array: val = [{I: id}, ...]
+      if (Array.isArray(val)) {
+        val.forEach(extractFromEvent);
+        return ids;
+      }
+
+      // Some endpoints return val.V or val.d
+      if (Array.isArray(val.V)) {
+        val.V.forEach(extractFromEvent);
+        return ids;
+      }
+    } catch (err) {
+      console.warn('[1xBet Ghana] Event ID parse error:', err.message);
+    }
+
+    return ids;
+  }
+
+  /**
+   * Returns cached event IDs if still fresh, otherwise fetches them.
+   * @returns {Promise<number[]>}
+   */
+  async _getEventIds() {
+    const now = Date.now();
+    if (this._cachedEventIds !== null && (now - this._cacheTimestamp) < this._cacheTTL) {
+      return this._cachedEventIds;
+    }
+
+    const ids = await this._fetchEventIds();
+    if (ids.length > 0) {
+      this._cachedEventIds = ids;
+      this._cacheTimestamp = now;
+    } else {
+      console.warn('[1xBet Ghana] All bulk endpoints failed; using empty game list.');
+      // Keep stale cache if available
+      if (this._cachedEventIds === null) this._cachedEventIds = [];
+    }
+
+    return this._cachedEventIds;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Market extraction helpers (unchanged logic from original)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _extractMarkets(g) {
+    const markets = [];
+    if (!g.E) return markets;
+
+    const ci = g.CI;
+
+    // 1. 1X2
+    const h1x2 = g.E.find(e => e.T === 1);
+    const d1x2 = g.E.find(e => e.T === 2);
+    const a1x2 = g.E.find(e => e.T === 3);
+    if (h1x2 && a1x2) {
+      markets.push({
+        id: '1',
+        type: '1x2',
+        name: '1X2',
+        outcomes: [
+          { id: `${ci}_1`, name: 'Home', odds: parseFloat(h1x2.C), eventId: String(ci) },
+          ...(d1x2 ? [{ id: `${ci}_X`, name: 'Draw', odds: parseFloat(d1x2.C), eventId: String(ci) }] : []),
+          { id: `${ci}_2`, name: 'Away', odds: parseFloat(a1x2.C), eventId: String(ci) }
+        ]
+      });
+    }
+
+    // 2. Over/Under – full-time (0.5 … 5.5)
+    const totalLines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+    for (const line of totalLines) {
+      const over  = g.E.find(e => (e.T === 7 || e.T === 9)  && e.P === line);
+      const under = g.E.find(e => (e.T === 8 || e.T === 10) && e.P === line);
+      if (over && under) {
+        markets.push({
+          id: '18',
+          type: `over_under_${line}`,
+          name: 'Over/Under Goals',
+          line: `Total ${line}`,
+          specifier: `total=${line}`,
+          outcomes: [
+            { id: `${ci}_o${line}`, name: `Over ${line}`,  odds: parseFloat(over.C),  eventId: String(ci) },
+            { id: `${ci}_u${line}`, name: `Under ${line}`, odds: parseFloat(under.C), eventId: String(ci) }
+          ]
+        });
+      }
+    }
+
+    // 3. BTTS (Group 62, T: 13=Yes, 14=No)
+    const bttsYes = g.E.find(e => e.T === 13 && e.G === 62);
+    const bttsNo  = g.E.find(e => e.T === 14 && e.G === 62);
+    if (bttsYes && bttsNo) {
+      markets.push({
+        id: '29',
+        type: 'btts',
+        name: 'Both Teams To Score',
+        line: 'Yes / No',
+        outcomes: [
+          { id: `${ci}_yes`, name: 'Yes', odds: parseFloat(bttsYes.C), eventId: String(ci) },
+          { id: `${ci}_no`,  name: 'No',  odds: parseFloat(bttsNo.C),  eventId: String(ci) }
+        ]
+      });
+    }
+
+    // 4. Double Chance (T: 4=1X, 5=12, 6=X2)
+    const dc1X = g.E.find(e => e.T === 4);
+    const dc12 = g.E.find(e => e.T === 5);
+    const dcX2 = g.E.find(e => e.T === 6);
+    if (dc1X && dc12 && dcX2) {
+      markets.push({
+        id: '10',
+        type: 'double_chance',
+        name: 'Double Chance',
+        line: 'Double Chance',
+        outcomes: [
+          { id: `${ci}_1x`, name: '1X', odds: parseFloat(dc1X.C), eventId: String(ci) },
+          { id: `${ci}_12`, name: '12', odds: parseFloat(dc12.C), eventId: String(ci) },
+          { id: `${ci}_x2`, name: 'X2', odds: parseFloat(dcX2.C), eventId: String(ci) }
+        ]
+      });
+    }
+
+    // 5. Asian Handicaps (Group 3, T: 1=Home, 2=Away, e.P = handicap line)
+    const hcpLines = [-1.5, -0.5, 0.5, 1.5];
+    for (const line of hcpLines) {
+      const hH = g.E.find(e => e.G === 3 && e.T === 1 && e.P === line);
+      const aH = g.E.find(e => e.G === 3 && e.T === 2 && e.P === -line);
+      if (hH && aH) {
+        const hKey = line > 0 ? `+${line}` : `${line}`;
+        const aKey = -line > 0 ? `+${-line}` : `${-line}`;
+        markets.push({
+          id: '64',
+          type: `asian_handicap_${hKey}`,
+          name: 'Asian Handicap',
+          line: `Handicap ${hKey}`,
+          outcomes: [
+            { id: `${ci}_h${line}`,  name: `Home (${hKey})`, odds: parseFloat(hH.C), eventId: String(ci) },
+            { id: `${ci}_a${-line}`, name: `Away (${aKey})`, odds: parseFloat(aH.C), eventId: String(ci) }
+          ]
+        });
+      }
+    }
+
+    // 6. 1st Half 1X2 (Group G:2, T: 1=Home, 2=Draw, 3=Away)
+    const h1H = g.E.find(e => e.G === 2 && e.T === 1);
+    const d1H = g.E.find(e => e.G === 2 && e.T === 2);
+    const a1H = g.E.find(e => e.G === 2 && e.T === 3);
+    if (h1H && a1H) {
+      markets.push({
+        id: '2',
+        type: '1h_1x2',
+        name: '1st Half 1X2',
+        line: '1st Half',
+        outcomes: [
+          { id: `${ci}_1h1`, name: 'Home (1H)', odds: parseFloat(h1H.C), eventId: String(ci) },
+          ...(d1H ? [{ id: `${ci}_1hX`, name: 'Draw (1H)', odds: parseFloat(d1H.C), eventId: String(ci) }] : []),
+          { id: `${ci}_1h2`, name: 'Away (1H)', odds: parseFloat(a1H.C), eventId: String(ci) }
+        ]
+      });
+    }
+
+    // 7. 1st Half Over/Under (Group G:2, T: 7/9=Over, 8/10=Under with e.P)
+    const htLines = [0.5, 1.5, 2.5];
+    for (const line of htLines) {
+      const htOver  = g.E.find(e => e.G === 2 && (e.T === 7 || e.T === 9)  && e.P === line);
+      const htUnder = g.E.find(e => e.G === 2 && (e.T === 8 || e.T === 10) && e.P === line);
+      if (htOver && htUnder) {
+        markets.push({
+          id: '21',
+          type: `1h_over_under_${line}`,
+          name: '1st Half Over/Under',
+          line: `HT Total ${line}`,
+          specifier: `total=${line}`,
+          outcomes: [
+            { id: `${ci}_hto${line}`, name: `HT Over ${line}`,  odds: parseFloat(htOver.C),  eventId: String(ci) },
+            { id: `${ci}_htu${line}`, name: `HT Under ${line}`, odds: parseFloat(htUnder.C), eventId: String(ci) }
+          ]
+        });
+      }
+    }
+
+    return markets;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // fetchOdds – main entry point
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Fetches real-time upcoming pre-match fixtures from 1xBet Ghana.
+   * Dynamically discovers event IDs from bulk endpoints, then fetches
+   * individual game zips (limited to first 30 to avoid timeouts).
    * @returns {Promise<Array<Object>>}
    */
   async fetchOdds() {
     const matches = [];
 
-    for (const gameId of this.verifiedGameIds) {
+    // --- 1. Discover event IDs (cached for 15 s) ---------------------------
+    let eventIds;
+    try {
+      eventIds = await this._getEventIds();
+    } catch (err) {
+      console.warn('[1xBet Ghana] Event ID discovery threw unexpectedly:', err.message);
+      eventIds = [];
+    }
+
+    // Limit to first 30 to avoid Render timeout
+    const idsToFetch = eventIds.slice(0, 30);
+
+    // --- 2. Fetch individual game zips -------------------------------------
+    for (const gameId of idsToFetch) {
       try {
-        const res = await fetch(`${this.baseUrl}/service-api/LineFeed/GetGameZip?id=${gameId}&lng=en`, { headers: this.headers });
+        const res = await fetch(
+          `${this.baseUrl}/service-api/LineFeed/GetGameZip?id=${gameId}&lng=en`,
+          { headers: this.headers, signal: AbortSignal.timeout(8000) }
+        );
         if (!res.ok) continue;
 
         const data = await res.json();
         const g = data.Value;
         if (!g || !g.O1 || !g.O2) continue;
 
-        const startTime = new Date(g.S * 1000).toISOString();
-        if (new Date(startTime).getTime() <= Date.now()) continue;
+        // Skip live or already-started matches
+        if (g.IL === true) continue;
+        if (new Date(g.S * 1000).getTime() <= Date.now()) continue;
 
-        const markets = [];
+        // --- 3. Extract markets --------------------------------------------
+        const markets = this._extractMarkets(g);
+        if (markets.length === 0) continue;
 
-        // 1. 1X2 Market
-        if (g.E) {
-          const h = g.E.find(e => e.T === 1);
-          const d = g.E.find(e => e.T === 2);
-          const a = g.E.find(e => e.T === 3);
-          if (h && a) {
-            markets.push({
-              id: '1',
-              type: '1x2',
-              name: '1X2',
-              outcomes: [
-                { id: `${g.CI}_1`, name: 'Home', odds: parseFloat(h.C), eventId: String(g.CI) },
-                ...(d ? [{ id: `${g.CI}_X`, name: 'Draw', odds: parseFloat(d.C), eventId: String(g.CI) }] : []),
-                { id: `${g.CI}_2`, name: 'Away', odds: parseFloat(a.C), eventId: String(g.CI) }
-              ]
-            });
-          }
+        // --- 4 & 5. Build match object -------------------------------------
+        const competition = g.LE || g.SE || 'Football';
+        const country     = g.CN || 'International';
+        const startTime   = new Date(g.S * 1000).toISOString();
+        const dateStr     = new Date(g.S * 1000).toLocaleString('en-GB', {
+          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
 
-          // 2. Over/Under All Lines (0.5, 1.5, 2.5, 3.5, 4.5, 5.5)
-          const totalLines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-          for (const line of totalLines) {
-            const over = g.E.find(e => (e.T === 7 || e.T === 9) && e.P === line);
-            const under = g.E.find(e => (e.T === 8 || e.T === 10) && e.P === line);
-            if (over && under) {
-              markets.push({
-                id: '18',
-                type: `over_under_${line}`,
-                name: 'Over/Under Goals',
-                line: `Total ${line}`,
-                specifier: `total=${line}`,
-                outcomes: [
-                  { id: `${g.CI}_o${line}`, name: `Over ${line}`, odds: parseFloat(over.C), eventId: String(g.CI) },
-                  { id: `${g.CI}_u${line}`, name: `Under ${line}`, odds: parseFloat(under.C), eventId: String(g.CI) }
-                ]
-              });
-            }
-          }
-
-          // 3. Both Teams to Score (Group 62, T: 13=Yes, 14=No)
-          const bttsYes = g.E.find(e => e.T === 13 && e.G === 62);
-          const bttsNo = g.E.find(e => e.T === 14 && e.G === 62);
-          if (bttsYes && bttsNo) {
-            markets.push({
-              id: '29',
-              type: 'btts',
-              name: 'Both Teams To Score',
-              line: 'Yes / No',
-              outcomes: [
-                { id: `${g.CI}_yes`, name: 'Yes', odds: parseFloat(bttsYes.C), eventId: String(g.CI) },
-                { id: `${g.CI}_no`, name: 'No', odds: parseFloat(bttsNo.C), eventId: String(g.CI) }
-              ]
-            });
-          }
-
-          // 4. Double Chance (Group 8, T: 4=1X, 5=12, 6=X2)
-          const dc1X = g.E.find(e => e.T === 4);
-          const dc12 = g.E.find(e => e.T === 5);
-          const dcX2 = g.E.find(e => e.T === 6);
-          if (dc1X && dc12 && dcX2) {
-            markets.push({
-              id: '10',
-              type: 'double_chance',
-              name: 'Double Chance',
-              line: 'Double Chance',
-              outcomes: [
-                { id: `${g.CI}_1x`, name: '1X', odds: parseFloat(dc1X.C), eventId: String(g.CI) },
-                { id: `${g.CI}_12`, name: '12', odds: parseFloat(dc12.C), eventId: String(g.CI) },
-                { id: `${g.CI}_x2`, name: 'X2', odds: parseFloat(dcX2.C), eventId: String(g.CI) }
-              ]
-            });
-          }
-
-          // 5. Asian Handicaps (Group 3, T: 1=Home, 2=Away with e.P)
-          const hcpLines = [-1.5, -0.5, 0.5, 1.5];
-          for (const line of hcpLines) {
-            const h = g.E.find(e => e.G === 3 && e.T === 1 && e.P === line);
-            const a = g.E.find(e => e.G === 3 && e.T === 2 && e.P === -line);
-            if (h && a) {
-              const hKey = line > 0 ? `+${line}` : `${line}`;
-              markets.push({
-                id: '64',
-                type: `asian_handicap_${hKey}`,
-                name: 'Asian Handicap',
-                line: `Handicap ${hKey}`,
-                outcomes: [
-                  { id: `${g.CI}_h${line}`, name: `Home (${hKey})`, odds: parseFloat(h.C), eventId: String(g.CI) },
-                  { id: `${g.CI}_a${-line}`, name: `Away (${-line > 0 ? `+${-line}` : -line})`, odds: parseFloat(a.C), eventId: String(g.CI) }
-                ]
-              });
-            }
-          }
-        }
-
-        if (markets.length > 0) {
-          matches.push({
-            id: String(g.CI),
-            homeTeam: g.O1,
-            awayTeam: g.O2,
-            sport: 'Football',
-            competition: 'UEFA Nations League',
-            startTime,
-            dateStr: 'Tonight 19:45',
-            isLive: false,
-            markets
-          });
-        }
+        matches.push({
+          id: String(g.CI),
+          homeTeam: g.O1,
+          awayTeam: g.O2,
+          sport: 'Football',
+          competition,
+          country,
+          startTime,
+          dateStr,
+          isLive: false,
+          markets
+        });
       } catch (err) {
-        console.warn(`[1xBet Live] Match fetch error for ${gameId}:`, err.message);
+        console.warn(`[1xBet Ghana] Match fetch error for ${gameId}:`, err.message);
       }
     }
 
     return matches;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // generateBookingCode
+  // ─────────────────────────────────────────────────────────────────────────
+
   /**
-   * Generates a direct event URL / betslip reference for 1xBet Ghana
+   * Generates a direct event URL / betslip reference for 1xBet Ghana.
+   * Uses the actual event ID and competition name from the selection.
    * @param {Object} selection
    * @returns {Promise<{code: string, shareUrl: string}>}
    */
   async generateBookingCode(selection = {}) {
-    const eventId = String(selection.eventId || '');
+    const eventId    = String(selection.eventId || '');
+    const competition = (selection.competition || 'football')
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+    const shortCode  = eventId ? eventId.slice(-6) : 'GH';
+
     return {
-      code: `1X-${eventId ? eventId.slice(-4) : 'GH'}`,
-      shareUrl: `https://1xbet.com.gh/en/line/football/1706694-uefa-nations-league/${eventId}`
+      code: `1X-${shortCode}`,
+      shareUrl: `https://1xbet.com.gh/en/line/football/${competition}/${eventId}`
     };
   }
 }

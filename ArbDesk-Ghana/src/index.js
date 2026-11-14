@@ -19,9 +19,12 @@ const detector = new ArbDetector({
   defaultBankroll: config.defaultBankroll
 });
 
-let currentOpportunities = [];
-const seenArbIds = new Set();
-let isScanning = false;
+export let currentOpportunities = [];
+export let lastScanAt = null;
+export let isScanning = false;
+
+const SEEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const seenArbIds = new Map();
 
 /**
  * Executes a scan cycle across Ghana sportsbooks
@@ -39,6 +42,10 @@ async function runScan() {
     // Pulls real-time feeds across SportyBet, Betpawa, 1xBet, Soccabet, and Betway
     const feeds = await liveManager.getLatestFeeds();
 
+    for (const feed of feeds) {
+      console.log(`  [${feed.bookmaker}] ${feed.matches.length} matches loaded`);
+    }
+
     const opps = await detector.findOpportunities(feeds, bookers);
     currentOpportunities = opps;
 
@@ -51,8 +58,14 @@ async function runScan() {
 
       // Send to Telegram if enabled, margin >= minMarginPct, and not already notified
       const minMargin = config.telegram.minMarginPct ?? 1.0;
+      const now = Date.now();
+      // Clean up expired entries
+      for (const [id, ts] of seenArbIds.entries()) {
+        if (now - ts > SEEN_TTL_MS) seenArbIds.delete(id);
+      }
+      // Check if already seen within last 30 mins
       if (config.telegram.enabled && arb.marginPct >= minMargin && !seenArbIds.has(arb.id)) {
-        seenArbIds.add(arb.id);
+        seenArbIds.set(arb.id, now);
         await sendTelegramMessage(
           config.telegram.botToken,
           config.telegram.chatId,
@@ -61,11 +74,8 @@ async function runScan() {
       }
     }
 
-    // Prevent memory leak over prolonged 24/7 uptime
-    if (seenArbIds.size > 500) {
-      seenArbIds.clear();
-    }
     console.log(`--------------------------------------------------`);
+    lastScanAt = Date.now();
   } catch (err) {
     console.error('[Scanner] Scan cycle error:', err.message);
   } finally {
@@ -83,6 +93,7 @@ console.log(`
 📱 Web Dashboard: http://localhost:${config.port}
 💬 Telegram Alerts: ${config.telegram.enabled ? 'Enabled' : 'Disabled (Set TELEGRAM_BOT_TOKEN to activate)'}
 💰 Default Bankroll: GHS ${config.defaultBankroll}
+🔁 Scan Interval: every ${(config.pollIntervalMs || 8000) / 1000}s
 =====================================================
 `);
 

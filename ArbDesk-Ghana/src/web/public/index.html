@@ -51,6 +51,34 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
+    /* Skeleton shimmer */
+    @keyframes shimmer {
+      0% { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, #151D2F 25%, #1C263D 50%, #151D2F 75%);
+      background-size: 800px 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    /* Toast slide-down animation */
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .toast-visible {
+      animation: slideDown 0.22s ease forwards;
+    }
+    /* Radar rings */
+    @keyframes radarPulse {
+      0%   { transform: scale(0.6); opacity: 0.9; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    .radar-ring {
+      animation: radarPulse 2s ease-out infinite;
+    }
+    .radar-ring:nth-child(2) { animation-delay: 0.5s; }
+    .radar-ring:nth-child(3) { animation-delay: 1s; }
   </style>
 </head>
 <body class="min-h-screen pb-24">
@@ -93,21 +121,24 @@
 
     <!-- Sports Filter Tabs -->
     <div class="max-w-2xl mx-auto mt-2.5 flex space-x-2 overflow-x-auto no-scrollbar">
-      <button onclick="setSport('All')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">All</button>
-      <button onclick="setSport('Football')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Football</button>
-      <button onclick="setSport('Basketball')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Basketball</button>
-      <button onclick="setSport('Tennis')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Tennis</button>
-      <button onclick="setSport('Baseball')" class="sport-tab px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Baseball</button>
+      <button onclick="setSport('All')" class="sport-tab whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">All</button>
+      <button onclick="setSport('Football')" class="sport-tab whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Football</button>
+      <button onclick="setSport('Basketball')" class="sport-tab whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Basketball</button>
+      <button onclick="setSport('Tennis')" class="sport-tab whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Tennis</button>
+      <button onclick="setSport('Baseball')" class="sport-tab whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Baseball</button>
     </div>
 
-    <!-- Expanded Market Coverage Filter Tabs -->
+    <!-- Market Filter Chips -->
     <div class="max-w-2xl mx-auto mt-2 flex space-x-1.5 overflow-x-auto no-scrollbar">
-      <button onclick="setMarketFilter('All')" data-market="All" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500">All Markets</button>
-      <button onclick="setMarketFilter('handicaps')" data-market="handicaps" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Handicaps</button>
-      <button onclick="setMarketFilter('totals')" data-market="totals" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Over/Under Totals</button>
-      <button onclick="setMarketFilter('synthetic')" data-market="synthetic" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">⚡ Synthetic Hedges</button>
-      <button onclick="setMarketFilter('1x2')" data-market="1x2" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">1X2 & Double Chance</button>
-      <button onclick="setMarketFilter('others')" data-market="others" class="market-filter-pill px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">BTTS / DNB / Clean Sheet</button>
+      <button onclick="setMarketFilter('All')" data-market="All" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500">All</button>
+      <button onclick="setMarketFilter('1X2')" data-market="1X2" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">1X2</button>
+      <button onclick="setMarketFilter('Over/Under')" data-market="Over/Under" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Over/Under</button>
+      <button onclick="setMarketFilter('BTTS')" data-market="BTTS" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">BTTS</button>
+      <button onclick="setMarketFilter('Handicap')" data-market="Handicap" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Handicap</button>
+      <button onclick="setMarketFilter('Double Chance')" data-market="Double Chance" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">Double Chance</button>
+      <button onclick="setMarketFilter('1st Half')" data-market="1st Half" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">1st Half</button>
+      <button onclick="setMarketFilter('2nd Half')" data-market="2nd Half" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">2nd Half</button>
+      <button onclick="setMarketFilter('Synthetic')" data-market="Synthetic" class="market-filter-pill whitespace-nowrap px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800/90 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700/50">⚡ Synthetic</button>
     </div>
 
     <!-- Safety & Bookmaker Guarantee Banner -->
@@ -139,12 +170,23 @@
 
       <!-- High-converting preset chips -->
       <div class="flex items-center space-x-1.5">
-        <button onclick="setGlobalStake(50)" id="stakeBtn-50" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">50</button>
-        <button onclick="setGlobalStake(100)" id="stakeBtn-100" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500">100</button>
-        <button onclick="setGlobalStake(200)" id="stakeBtn-200" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">200</button>
-        <button onclick="setGlobalStake(500)" id="stakeBtn-500" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">500</button>
-        <button onclick="setGlobalStake(1000)" id="stakeBtn-1000" class="stake-pill px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">1000</button>
+        <button onclick="setGlobalStake(50)" id="stakeBtn-50" class="stake-pill whitespace-nowrap px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">50</button>
+        <button onclick="setGlobalStake(100)" id="stakeBtn-100" class="stake-pill whitespace-nowrap px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-emerald-600 text-white shadow-sm shadow-emerald-600/40 border border-emerald-500">100</button>
+        <button onclick="setGlobalStake(200)" id="stakeBtn-200" class="stake-pill whitespace-nowrap px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">200</button>
+        <button onclick="setGlobalStake(500)" id="stakeBtn-500" class="stake-pill whitespace-nowrap px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">500</button>
+        <button onclick="setGlobalStake(1000)" id="stakeBtn-1000" class="stake-pill whitespace-nowrap px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer active:scale-95 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60">1000</button>
       </div>
+    </div>
+
+    <!-- Scanner Status Bar -->
+    <div id="scannerStatusBar" class="flex items-center justify-between bg-[#0d1a0d] border border-emerald-900/60 rounded-xl px-3.5 py-2 text-[11px] shadow-sm">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0"></span>
+        <span class="font-black text-emerald-400 tracking-widest uppercase text-[10px]">LIVE SCANNING</span>
+        <span class="text-gray-500 mx-1">·</span>
+        <span class="text-gray-400 font-semibold">SP · BP · 1X · SC · BW</span>
+      </div>
+      <span id="statusBarLastScan" class="text-gray-400 font-semibold text-[10px]">Initializing...</span>
     </div>
 
     <!-- Live Opportunities Feed -->
@@ -184,11 +226,11 @@
 
         <!-- Chips -->
         <div class="flex items-center justify-between gap-1.5 pt-1">
-          <button onclick="setGlobalStake(50)" id="calcPill-50" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">50</button>
-          <button onclick="setGlobalStake(100)" id="calcPill-100" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow-sm shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer text-center">100</button>
-          <button onclick="setGlobalStake(200)" id="calcPill-200" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">200</button>
-          <button onclick="setGlobalStake(500)" id="calcPill-500" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">500</button>
-          <button onclick="setGlobalStake(1000)" id="calcPill-1000" class="calc-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">1000</button>
+          <button onclick="setGlobalStake(50)" id="calcPill-50" class="calc-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">50</button>
+          <button onclick="setGlobalStake(100)" id="calcPill-100" class="calc-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow-sm shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer text-center">100</button>
+          <button onclick="setGlobalStake(200)" id="calcPill-200" class="calc-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">200</button>
+          <button onclick="setGlobalStake(500)" id="calcPill-500" class="calc-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">500</button>
+          <button onclick="setGlobalStake(1000)" id="calcPill-1000" class="calc-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">1000</button>
         </div>
       </div>
 
@@ -196,41 +238,37 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-[11px] text-gray-400 font-bold uppercase tracking-wider block" id="calcLeg1Label">Leg 1 Odds</label>
-          <input type="number" id="calcOdd1" step="0.01" value="2.26" oninput="runManualCalc()" class="w-full mt-1.5 bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-colors">
+          <input type="number" id="calcOdd1" step="0.01" value="2.26" oninput="runManualCalc()" class="w-full mt-1.5 bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-sm font-black text-white focus:outline-none focus:border-emerald-500">
         </div>
         <div>
           <label class="text-[11px] text-gray-400 font-bold uppercase tracking-wider block" id="calcLeg2Label">Leg 2 Odds</label>
-          <input type="number" id="calcOdd2" step="0.01" value="2.00" oninput="runManualCalc()" class="w-full mt-1.5 bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-colors">
+          <input type="number" id="calcOdd2" step="0.01" value="2.00" oninput="runManualCalc()" class="w-full mt-1.5 bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-sm font-black text-white focus:outline-none focus:border-emerald-500">
         </div>
       </div>
 
-      <!-- Execution Breakdown in Calculator Tab -->
-      <div id="calcResult" class="p-3.5 bg-gray-950 border border-gray-800 rounded-xl space-y-2.5">
-        <!-- Results injected dynamically -->
+      <!-- Calculation Result Panel -->
+      <div class="bg-[#0c1220] border border-gray-800 rounded-xl p-4 space-y-3" id="calcResultContainer">
+        <!-- Rendered by runManualCalc() -->
       </div>
-
-      <button onclick="openCalcModal(document.getElementById('calcEventSelect').value)" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center space-x-2">
-        <i class="fa-solid fa-up-right-from-square text-xs"></i>
-        <span>Open In Full Modal</span>
-      </button>
     </section>
 
   </main>
 
-  <!-- Interactive Opportunity Calculator Popup Modal -->
-  <div id="stakeModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 opacity-0 pointer-events-none transition-all duration-200">
-    <div class="w-full max-w-lg bg-[#151D2F] border border-gray-800 rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto no-scrollbar space-y-4">
-      
+  <!-- Staking Plan Details Modal Popup -->
+  <div id="stakeModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-[#151D2F] border border-gray-800 w-full max-w-lg rounded-3xl p-5 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]">
+
       <!-- Modal Header -->
       <div class="flex items-start justify-between pb-3 border-b border-gray-800">
         <div>
           <div class="flex items-center space-x-2">
-            <span id="modalEventBadge" class="w-6 h-6 rounded-md bg-emerald-600 text-white font-black text-xs flex items-center justify-center">#1</span>
-            <h2 id="modalEventTitle" class="text-base font-extrabold text-white">Event Title</h2>
+            <span class="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase" id="modalMarketBadge">Over/Under</span>
+            <span class="text-xs text-gray-400 font-medium" id="modalDateBadge">Today</span>
           </div>
-          <div id="modalEventMeta" class="text-xs text-gray-400 mt-1">League • Market</div>
+          <h3 class="text-base font-extrabold text-white mt-1" id="modalEventTitle">Match Title</h3>
+          <div class="mt-1" id="modalLeagueBadge"></div>
         </div>
-        <button onclick="closeCalcModal()" class="w-8 h-8 rounded-full bg-gray-800/80 hover:bg-gray-700 active:scale-90 text-gray-400 hover:text-white flex items-center justify-center transition-all cursor-pointer">
+        <button onclick="closeCalcModal()" class="w-8 h-8 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
@@ -247,11 +285,11 @@
 
         <!-- Quick Chips -->
         <div class="flex items-center justify-between gap-1.5 pt-1">
-          <button onclick="setGlobalStake(50)" id="modalPill-50" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">50</button>
-          <button onclick="setGlobalStake(100)" id="modalPill-100" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow-sm shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer text-center">100</button>
-          <button onclick="setGlobalStake(200)" id="modalPill-200" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">200</button>
-          <button onclick="setGlobalStake(500)" id="modalPill-500" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">500</button>
-          <button onclick="setGlobalStake(1000)" id="modalPill-1000" class="modal-stake-chip flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">1000</button>
+          <button onclick="setGlobalStake(50)" id="modalPill-50" class="modal-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">50</button>
+          <button onclick="setGlobalStake(100)" id="modalPill-100" class="modal-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white border border-emerald-500 shadow-sm shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer text-center">100</button>
+          <button onclick="setGlobalStake(200)" id="modalPill-200" class="modal-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">200</button>
+          <button onclick="setGlobalStake(500)" id="modalPill-500" class="modal-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">500</button>
+          <button onclick="setGlobalStake(1000)" id="modalPill-1000" class="modal-stake-chip whitespace-nowrap flex-1 py-1 rounded-lg text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60 active:scale-95 transition-all cursor-pointer text-center">1000</button>
         </div>
       </div>
 
@@ -264,7 +302,7 @@
       <div class="px-3 py-2 bg-gray-900/90 border border-gray-800 rounded-xl flex items-center justify-between text-xs">
         <div class="flex items-center space-x-2">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="modalOddsStatus" class="font-bold text-gray-300 text-[11px]">Odds Active & Verified</span>
+          <span id="modalOddsStatus" class="font-bold text-gray-300 text-[11px]">Odds Active &amp; Verified</span>
         </div>
         <button onclick="verifyModalOdds(this)" class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 active:scale-95 text-emerald-400 font-extrabold text-[10px] rounded-lg border border-gray-700/80 transition-all cursor-pointer flex items-center space-x-1">
           <i class="fa-solid fa-arrows-rotate text-[10px]" id="verifySpinIcon"></i>
@@ -320,7 +358,7 @@
 
   <!-- Floating Toast Notification -->
   <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-emerald-600 text-white text-xs font-extrabold rounded-full shadow-2xl transition-all duration-200 opacity-0 pointer-events-none flex items-center space-x-2 border border-emerald-400/40">
-    <i class="fa-solid fa-check"></i>
+    <i class="fa-solid fa-check" id="toastIcon"></i>
     <span id="toastMsg">Copied!</span>
   </div>
 
