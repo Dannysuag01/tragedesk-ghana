@@ -572,6 +572,56 @@ return [
    */
 
   /**
+   * Generates prioritized search query candidates for matching Betpawa fixtures
+   * @param {string} homeName
+   * @param {string} awayName
+   * @returns {string[]}
+   */
+  _getSearchQueries(homeName, awayName) {
+    const queries = [];
+    const addQuery = (q) => {
+      const trimmed = (q || '').trim();
+      if (trimmed.length >= 3 && !queries.some(existing => existing.toLowerCase() === trimmed.toLowerCase())) {
+        queries.push(trimmed);
+      }
+    };
+
+    // 1. Longest significant word from cleaned home name
+    const cleanHome = cleanTeamName(homeName);
+    const homeWords = cleanHome.split(/\s+/).filter(w => w.length >= 3);
+    if (homeWords.length > 0) {
+      addQuery(homeWords.sort((a, b) => b.length - a.length)[0]);
+    }
+
+    // 2. Longest word from raw home name (ignoring noise words)
+    const rawHomeWords = (homeName || '')
+      .replace(/[^a-zA-Z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => !['fc', 'sc', 'cf', 'fk', 'u19', 'u20', 'u21', 'women', 'ladies'].includes(w.toLowerCase()) && w.length >= 3);
+    if (rawHomeWords.length > 0) {
+      addQuery(rawHomeWords.sort((a, b) => b.length - a.length)[0]);
+    }
+
+    // 3. Fallback: Longest word from cleaned away name
+    const cleanAway = cleanTeamName(awayName);
+    const awayWords = cleanAway.split(/\s+/).filter(w => w.length >= 3);
+    if (awayWords.length > 0) {
+      addQuery(awayWords.sort((a, b) => b.length - a.length)[0]);
+    }
+
+    // 4. Raw away word
+    const rawAwayWords = (awayName || '')
+      .replace(/[^a-zA-Z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => !['fc', 'sc', 'cf', 'fk', 'u19', 'u20', 'u21', 'women', 'ladies'].includes(w.toLowerCase()) && w.length >= 3);
+    if (rawAwayWords.length > 0) {
+      addQuery(rawAwayWords.sort((a, b) => b.length - a.length)[0]);
+    }
+
+    return queries;
+  }
+
+  /**
    * Concurrently searches, maps and parses Betpawa Ghana markets for a given match
    * @param {Object} ev SportyBet event object
    * @param {Object} bpHeaders HTTP headers
@@ -583,9 +633,8 @@ return [
   async _mapBetpawaForEvent(ev, bpHeaders, evSport, spComp, spCountry) {
   // 2. Search & Map matching event on Betpawa Ghana across all lines
   try {
-    const cleanHome = cleanTeamName(ev.homeTeamName);
-    const teamQuery = cleanHome.split(' ')[0] || (ev.homeTeamName || '').replace(/women|fc|fk|sc|u21|u19/gi, '').trim().split(' ')[0];
-    if (teamQuery && teamQuery.length >= 3) {
+    const queries = this._getSearchQueries(ev.homeTeamName, ev.awayTeamName);
+    if (queries.length > 0) {
       const fixtureCacheKey = `${ev.homeTeamName}-${ev.awayTeamName}`.toLowerCase();
       const cached = this.betpawaEventCache.get(fixtureCacheKey);
       let bpEv;
@@ -595,67 +644,74 @@ return [
         bpEv = cached.data;
       } else {
         bpEv = null;
-        const bpSearchRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(teamQuery)}&_t=${Date.now()}`, {
-          headers: bpHeaders,
-          signal: AbortSignal.timeout(3500)
-        });
-        if (bpSearchRes.ok) {
-          const bpSearch = await bpSearchRes.json();
-          const candidates = bpSearch.events || [];
+        for (const teamQuery of queries) {
+          try {
+            const bpSearchRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(teamQuery)}&_t=${Date.now()}`, {
+              headers: bpHeaders,
+              signal: AbortSignal.timeout(3500)
+            });
+            if (bpSearchRes.ok) {
+              const bpSearch = await bpSearchRes.json();
+              const candidates = bpSearch.events || [];
 
-          for (const cand of candidates) {
-            // Match sport category
-            if (cand.category?.name && evSport) {
-              const cName = cand.category.name.toLowerCase();
-              const sName = evSport.toLowerCase();
-              if (cName !== sName && !cName.includes(sName) && !sName.includes(cName)) {
-                continue;
+              for (const cand of candidates) {
+                // Match sport category
+                if (cand.category?.name && evSport) {
+                  const cName = cand.category.name.toLowerCase();
+                  const sName = evSport.toLowerCase();
+                  if (cName !== sName && !cName.includes(sName) && !sName.includes(cName)) {
+                    continue;
+                  }
+                }
+
+                const candP1 = cand.participants?.[0]?.name;
+                const candP2 = cand.participants?.[1]?.name;
+                let candHome = candP1;
+                let candAway = candP2;
+                if (!candHome || !candAway) {
+                  const parts = (cand.name || '').split(/\s+-\s+|\s+vs\.?\s+/i);
+                  candHome = parts[0]?.trim();
+                  candAway = parts[1]?.trim();
+                }
+                if (!candHome || !candAway) continue;
+
+                // Rigorous verification: checks sport, teams, league/competition, gender, kickoff
+                const matches = isMatchEqual(
+                  {
+                    homeTeam: ev.homeTeamName,
+                    awayTeam: ev.awayTeamName,
+                    sport: evSport,
+                    competition: spComp,
+                    country: spCountry,
+                    startTime: new Date(ev.estimateStartTime).toISOString()
+                  },
+                  {
+                    homeTeam: candHome,
+                    awayTeam: candAway,
+                    sport: cand.category?.name || evSport,
+                    competition: cand.competition?.name,
+                    country: cand.region?.name,
+                    startTime: cand.startTime
+                  }
+                );
+
+                if (matches) {
+                  bpEv = {
+                    ...cand,
+                    verifiedHome: candHome,
+                    verifiedAway: candAway
+                  };
+                  break;
+                }
               }
             }
-
-            const candP1 = cand.participants?.[0]?.name;
-            const candP2 = cand.participants?.[1]?.name;
-            let candHome = candP1;
-            let candAway = candP2;
-            if (!candHome || !candAway) {
-              const parts = (cand.name || '').split(/\s+-\s+|\s+vs\.?\s+/i);
-              candHome = parts[0]?.trim();
-              candAway = parts[1]?.trim();
-            }
-            if (!candHome || !candAway) continue;
-
-            // Rigorous verification: checks sport, teams, league/competition, gender, kickoff
-            const matches = isMatchEqual(
-              {
-                homeTeam: ev.homeTeamName,
-                awayTeam: ev.awayTeamName,
-                sport: evSport,
-                competition: spComp,
-                country: spCountry,
-                startTime: new Date(ev.estimateStartTime).toISOString()
-              },
-              {
-                homeTeam: candHome,
-                awayTeam: candAway,
-                sport: cand.category?.name || evSport,
-                competition: cand.competition?.name,
-                country: cand.region?.name,
-                startTime: cand.startTime
-              }
-            );
-
-            if (matches) {
-              bpEv = {
-                ...cand,
-                verifiedHome: candHome,
-                verifiedAway: candAway
-              };
-              break;
-            }
+          } catch (e) {
+            // Ignore timeout on individual query attempt and try next candidate
           }
-
-          this.betpawaEventCache.set(fixtureCacheKey, { data: bpEv, ts: Date.now() });
+          if (bpEv) break; // Match found, avoid redundant network requests
         }
+
+        this.betpawaEventCache.set(fixtureCacheKey, { data: bpEv, ts: Date.now() });
       }
 
       if (bpEv) {
@@ -881,9 +937,9 @@ return [
           });
           for (const bm of bpHcp || []) {
             const bmName = (bm.marketType?.name || '').toLowerCase();
-            const isAsian = bmName.includes('asian');
+            const is2Way = bmName.includes('asian') || bmName.includes('2-way') || bmName.includes('2 way');
 
-            if (isAsian) {
+            if (is2Way) {
               const homePrices = [];
               const awayPrices = [];
               for (const r of bm.row || []) {

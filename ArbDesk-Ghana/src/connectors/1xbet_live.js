@@ -31,6 +31,9 @@ export class OneXBetLiveConnector extends BaseBookmaker {
    */
   async _fetchEventIds() {
     const endpoints = [
+      `${this.baseUrl}/LineFeed/Get1x2_Zip?sports=1,2,3,4,10&count=50&lng=en&mode=4`,
+      `${this.baseUrl}/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
+      `${this.baseUrl}/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
       `${this.baseUrl}/service-api/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
       `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
       `${this.baseUrl}/LineFeed/GetInformationForSport?sportId=1&lng=en&count=50&isLive=false`
@@ -317,11 +320,17 @@ export class OneXBetLiveConnector extends BaseBookmaker {
     // --- 2. Fetch individual game zips -------------------------------------
     for (const gameId of idsToFetch) {
       try {
-        const res = await fetch(
-          `${this.baseUrl}/service-api/LineFeed/GetGameZip?id=${gameId}&lng=en`,
+        let res = await fetch(
+          `${this.baseUrl}/LineFeed/GetGameZip?id=${gameId}&lng=en`,
           { headers: this.headers, signal: AbortSignal.timeout(2500) }
-        );
-        if (!res.ok) continue;
+        ).catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(
+            `${this.baseUrl}/service-api/LineFeed/GetGameZip?id=${gameId}&lng=en`,
+            { headers: this.headers, signal: AbortSignal.timeout(2500) }
+          ).catch(() => null);
+        }
+        if (!res || !res.ok) continue;
 
         const data = await res.json();
         const g = data.Value;

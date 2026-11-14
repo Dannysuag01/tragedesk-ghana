@@ -531,3 +531,55 @@ test('never matches Team Totals against Match Totals', async () => {
   const opps = await detector.findOpportunities(feeds);
   assert.strictEqual(opps.length, 0, 'Must NEVER cross-pair Home Team Total with Match Total');
 });
+
+test('never extracts or pairs Corner Asian Handicap or Half-Time Handicap against Match 1X2', async () => {
+  const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
+
+  // Betpawa Corner Asian Handicap First Half @ 1.35 vs Sportybet Full Time Away Win @ 4.90
+  // When market extraction strictly tags period and stat as corner/half, types can NEVER collide
+  const feeds = [
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [
+          {
+            id: '5099',
+            type: '1h_corner_asian_handicap_+0.5',
+            name: 'Corner Asian Handicap (1st Half)',
+            line: '1H Corners +0.5',
+            outcomes: [
+              { id: 'bp_c1', name: 'Home (+0.5)', odds: 1.35 },
+              { id: 'bp_c2', name: 'Away (-0.5)', odds: 2.95 }
+            ]
+          }
+        ]
+      }]
+    },
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [
+          {
+            id: '1',
+            type: '1x2',
+            name: '1X2 (Full Time)',
+            outcomes: [
+              { id: 'sp_1', name: 'Home', odds: 1.70 },
+              { id: 'sp_x', name: 'Draw', odds: 3.50 },
+              { id: 'sp_2', name: 'Away', odds: 4.90 }
+            ]
+          }
+        ]
+      }]
+    }
+  ];
+
+  const opps = await detector.findOpportunities(feeds);
+  assert.strictEqual(opps.length, 0, 'Must NEVER pair Corner Asian Handicap (1st Half) against Full Time 1X2 Away Win');
+});
