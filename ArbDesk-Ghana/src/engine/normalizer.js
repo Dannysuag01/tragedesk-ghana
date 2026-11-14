@@ -112,6 +112,38 @@ export function stringSimilarity(str1, str2) {
   return Math.max(tokenScore, levScore);
 }
 
+// Common country aliases
+const COUNTRY_ALIASES = {
+  'uk': 'england',
+  'united kingdom': 'england',
+  'great britain': 'england',
+  'gb': 'england',
+  'usa': 'united states',
+  'us': 'united states',
+  'united states of america': 'united states',
+  'uae': 'united arab emirates',
+  'world': 'international',
+  'intl': 'international',
+  'inter': 'international',
+  'europe': 'international',
+  'africa': 'international'
+};
+
+// Common competition aliases
+const COMP_ALIASES = {
+  'epl': 'premier league',
+  'english premier league': 'premier league',
+  'laliga': 'primera division',
+  'la liga': 'primera division',
+  'spain laliga': 'primera division',
+  'ucl': 'champions league',
+  'uefa champions league': 'champions league',
+  'uel': 'europa league',
+  'uefa europa league': 'europa league',
+  'unl': 'nations league',
+  'uefa nations league': 'nations league'
+};
+
 /**
  * Verifies if two competition / league representations are compatible
  * @param {string} [compA]
@@ -123,10 +155,12 @@ export function stringSimilarity(str1, str2) {
 export function isCompetitionCompatible(compA = '', compB = '', countryA = '', countryB = '') {
   // 1. Country conflict check
   if (countryA && countryB) {
-    const cA = countryA.toLowerCase().trim();
-    const cB = countryB.toLowerCase().trim();
-    const isInterA = cA.includes('inter') || cA.includes('world') || cA.includes('europe');
-    const isInterB = cB.includes('inter') || cB.includes('world') || cB.includes('europe');
+    const rawCA = countryA.toLowerCase().trim();
+    const rawCB = countryB.toLowerCase().trim();
+    const cA = COUNTRY_ALIASES[rawCA] || rawCA;
+    const cB = COUNTRY_ALIASES[rawCB] || rawCB;
+    const isInterA = cA === 'international' || cA.includes('inter') || cA.includes('world') || cA.includes('europe');
+    const isInterB = cB === 'international' || cB.includes('inter') || cB.includes('world') || cB.includes('europe');
     if (!isInterA && !isInterB && cA !== cB && !cA.includes(cB) && !cB.includes(cA)) {
       return false;
     }
@@ -134,8 +168,13 @@ export function isCompetitionCompatible(compA = '', compB = '', countryA = '', c
 
   if (!compA || !compB) return true;
 
-  const normA = compA.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-  const normB = compB.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  let normA = compA.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  let normB = compB.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  for (const [alias, canonical] of Object.entries(COMP_ALIASES)) {
+    if (normA === alias || normA.includes(alias)) normA = normA.replace(alias, canonical).trim();
+    if (normB === alias || normB.includes(alias)) normB = normB.replace(alias, canonical).trim();
+  }
 
   // If either is generic placeholder
   if (normA === 'football' || normB === 'football' || normA === 'soccer' || normB === 'soccer' || normA.length === 0 || normB.length === 0) {

@@ -313,9 +313,9 @@ export class TrageDeskDetector {
   _generateSyntheticMarkets(group) {
     const markets = group.markets;
 
-    // 1. Double Chance vs 1X2 Hedges
-    const m1x2 = Object.values(markets).find(m => m.type === '1x2');
-    const mDc = Object.values(markets).find(m => m.type === 'double_chance');
+    // 1. Double Chance vs 1X2 Hedges (Strictly Match Goals Full Time)
+    const m1x2 = Object.values(markets).find(m => m.type === '1x2' && !/corner|card|1h|2h|half|period/i.test(`${m.marketName || ''} ${m.line || ''}`));
+    const mDc = Object.values(markets).find(m => m.type === 'double_chance' && !/corner|card|1h|2h|half|period/i.test(`${m.marketName || ''} ${m.line || ''}`));
 
     if (m1x2 && mDc) {
       const home1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'home');
@@ -366,9 +366,9 @@ export class TrageDeskDetector {
       }
     }
 
-    // 2. Asian Handicap +0.5 vs 1X2 (Strict hedge: team with +0.5 covers win + draw, opposing team wins)
-    const ahPlus05 = Object.values(markets).find(m => m.type === 'asian_handicap_+0.5' || m.type === 'asian_handicap_0.5');
-    const ahMinus05 = Object.values(markets).find(m => m.type === 'asian_handicap_-0.5');
+    // 2. Asian Handicap +0.5 vs 1X2 (Strict hedge: Match Goals Full Time only - strictly exclude corners, cards, halves)
+    const ahPlus05 = Object.values(markets).find(m => (m.type === 'asian_handicap_+0.5' || m.type === 'asian_handicap_0.5') && !/corner|card|booking|foul|1h|2h|half|period|quarter/i.test(`${m.marketName || ''} ${m.line || ''}`));
+    const ahMinus05 = Object.values(markets).find(m => m.type === 'asian_handicap_-0.5' && !/corner|card|booking|foul|1h|2h|half|period|quarter/i.test(`${m.marketName || ''} ${m.line || ''}`));
     if (m1x2) {
       const home1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'home');
       const away1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'away');

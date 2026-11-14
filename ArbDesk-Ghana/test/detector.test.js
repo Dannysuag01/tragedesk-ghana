@@ -584,6 +584,60 @@ test('never extracts or pairs Corner Asian Handicap or Half-Time Handicap agains
   assert.strictEqual(opps.length, 0, 'Must NEVER pair Corner Asian Handicap (1st Half) against Full Time 1X2 Away Win');
 });
 
+test('strictly rejects synthetic hedge when Full Time Asian Handicap (+0.5 @ 1.22) is not an arb against Away Win @ 4.90', async () => {
+  const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
+
+  // Correct Full Time Asian Handicap for Kosovo (+0.5) is 1.22 on Betpawa
+  // Sportybet Away Win is 4.90
+  // Sum = 1/1.22 + 1/4.90 = 0.8196 + 0.2040 = 1.0236 >= 1.0 (NO ARBITRAGE)
+  const feeds = [
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [
+          {
+            id: '5064',
+            type: 'asian_handicap_+0.5',
+            name: 'Asian Handicap',
+            line: 'Handicap +0.5',
+            outcomes: [
+              { id: 'bp_ah_1', name: 'Home (+0.5)', odds: 1.22 },
+              { id: 'bp_ah_2', name: 'Away (-0.5)', odds: 4.56 }
+            ]
+          }
+        ]
+      }]
+    },
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [
+          {
+            id: '1',
+            type: '1x2',
+            name: '1X2 (Full Time)',
+            outcomes: [
+              { id: 'sp_1', name: 'Home', odds: 1.75 },
+              { id: 'sp_x', name: 'Draw', odds: 3.60 },
+              { id: 'sp_2', name: 'Away', odds: 4.90 }
+            ]
+          }
+        ]
+      }]
+    }
+  ];
+
+  const opps = await detector.findOpportunities(feeds);
+  const synthArb = opps.find(o => o.market?.includes('Asian Handicap +0.5 vs Away Win'));
+  assert.strictEqual(synthArb, undefined, 'Must NEVER flag Kosovo vs Israel as an arb when real Full Time odds are 1.22');
+});
+
 test('detects multi-bookmaker arbitrage including PremierBet Ghana and Sportybet', async () => {
   const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
 

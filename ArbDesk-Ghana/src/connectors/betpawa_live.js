@@ -91,11 +91,15 @@ export class BetpawaLiveConnector extends BaseBookmaker {
 
     for (const m of eventDetails.markets) {
       const typeName = (m.marketType?.name || '').toLowerCase();
+      // Strictly ignore corner, card, or partial-period markets
+      if (/corner|card|booking|foul|1h|2h|half/i.test(typeName)) continue;
+
       const isOU = (mType.includes('over') || mType.includes('under') || mType.includes('goals')) && (typeName.includes('total score') || typeName.includes('over/under'));
       const isBTTS = (mType.includes('btts') || mType.includes('both')) && typeName.includes('both teams to score');
       const is1X2 = (mType.includes('1x2') || mType.includes('winner')) && typeName.includes('1x2');
+      const isAH = (mType.includes('asian') || mType.includes('handicap')) && typeName.includes('asian handicap');
 
-      if (isOU || isBTTS || is1X2) {
+      if (isOU || isBTTS || is1X2 || isAH) {
         for (const row of m.row || []) {
           for (const p of row.prices || []) {
             const pName = (p.name || '').toLowerCase();
@@ -162,7 +166,7 @@ export class BetpawaLiveConnector extends BaseBookmaker {
           selections: [
             {
               type: 'SINGLE',
-              selections: [ selectionId ]
+              selections: [selectionId]
             }
           ]
         }
