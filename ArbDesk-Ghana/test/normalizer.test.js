@@ -43,3 +43,69 @@ test('rejects matches with different start times (>2h)', () => {
   assert.strictEqual(isMatchEqual(fixtureA, fixtureB), false);
 });
 
+test('rejects Women vs Men match mismatch', () => {
+  const fixtureA = {
+    homeTeam: 'Vonds Ichihara FC Women',
+    awayTeam: 'JFA Academy Fukushima Women',
+    competition: 'Empress Cup, Women',
+    startTime: '2026-11-14T04:00:00Z'
+  };
+  const fixtureB = {
+    homeTeam: 'Vonds Ichihara FC',
+    awayTeam: 'J-Lease FC',
+    competition: 'Japan Football League',
+    startTime: '2026-11-14T04:00:00Z'
+  };
+
+  assert.strictEqual(isMatchEqual(fixtureA, fixtureB), false);
+});
+
+test('rejects matches when away teams differ', () => {
+  const fixtureA = {
+    homeTeam: 'Vonds Ichihara FC',
+    awayTeam: 'JFA Academy Fukushima',
+    startTime: '2026-11-14T04:00:00Z'
+  };
+  const fixtureB = {
+    homeTeam: 'Vonds Ichihara FC',
+    awayTeam: 'J-Lease FC',
+    startTime: '2026-11-14T04:00:00Z'
+  };
+
+  assert.strictEqual(isMatchEqual(fixtureA, fixtureB), false);
+});
+
+test('rejects matches from completely different leagues', () => {
+  const fixtureA = {
+    homeTeam: 'Arsenal',
+    awayTeam: 'Chelsea',
+    competition: 'Premier League',
+    country: 'England'
+  };
+  const fixtureB = {
+    homeTeam: 'Arsenal',
+    awayTeam: 'Chelsea',
+    competition: 'La Liga',
+    country: 'Spain'
+  };
+
+  assert.strictEqual(isMatchEqual(fixtureA, fixtureB), false);
+});
+
+test('accepts matches with compatible league naming', () => {
+  const fixtureA = {
+    homeTeam: 'Arsenal',
+    awayTeam: 'Chelsea',
+    competition: 'Premier League',
+    country: 'England'
+  };
+  const fixtureB = {
+    homeTeam: 'Arsenal FC',
+    awayTeam: 'Chelsea FC',
+    competition: 'England - Premier League',
+    country: 'England'
+  };
+
+  assert.strictEqual(isMatchEqual(fixtureA, fixtureB), true);
+});
+

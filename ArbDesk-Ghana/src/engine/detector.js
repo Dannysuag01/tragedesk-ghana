@@ -240,6 +240,7 @@ export class ArbDetector {
               startTime: match.startTime,
               dateStr: match.dateStr || new Date(match.startTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
               competition: match.competition,
+              country: match.country || null,
               sport: match.sport || 'Football',
               isLive,
               preMatch: !isLive,

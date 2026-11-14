@@ -12,6 +12,7 @@ import { BetpawaLiveConnector } from './betpawa_live.js';
 import { OneXBetLiveConnector } from './1xbet_live.js';
 import { SoccabetLiveConnector } from './soccabet_live.js';
 import { BetwayLiveConnector } from './betway_live.js';
+import { isMatchEqual, cleanTeamName } from '../engine/normalizer.js';
 
 export class LiveFeedManager {
   constructor() {
@@ -410,12 +411,19 @@ export class LiveFeedManager {
         }
 
         if (markets.length > 0) {
+          const spTourn = ev.sport?.category?.tournament?.name || ev.tournamentName;
+          const spCountry = ev.sport?.category?.name;
+          const spComp = spTourn
+            ? (spCountry && !spTourn.toLowerCase().includes(spCountry.toLowerCase()) ? `${spCountry} - ${spTourn}` : spTourn)
+            : (spCountry || 'Football');
+
           sportyMatches.push({
             id: ev.eventId,
             homeTeam: ev.homeTeamName,
             awayTeam: ev.awayTeamName,
             sport: 'Football',
-            competition: ev.tournamentName || 'Football',
+            competition: spComp,
+            country: spCountry,
             startTime: new Date(ev.estimateStartTime).toISOString(),
             dateStr: new Date(ev.estimateStartTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
             isLive: false,
@@ -424,26 +432,69 @@ export class LiveFeedManager {
 
           // 2. Search & Map matching event on Betpawa Ghana across all lines
           try {
-            const teamQuery = (ev.homeTeamName || '').replace(/women|fc|fk|sc|u21|u19/gi, '').trim().split(' ')[0];
+            const cleanHome = cleanTeamName(ev.homeTeamName);
+            const teamQuery = cleanHome.split(' ')[0] || (ev.homeTeamName || '').replace(/women|fc|fk|sc|u21|u19/gi, '').trim().split(' ')[0];
             if (teamQuery && teamQuery.length >= 3) {
-              let bpEvId = this.betpawaEventCache.get(teamQuery);
+              const fixtureCacheKey = `${ev.homeTeamName}-${ev.awayTeamName}`.toLowerCase();
+              let bpEv = this.betpawaEventCache.get(fixtureCacheKey);
 
-              if (!bpEvId) {
+              if (bpEv === undefined) {
+                bpEv = null;
                 const bpSearchRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(teamQuery)}`, { headers: bpHeaders });
                 if (bpSearchRes.ok) {
                   const bpSearch = await bpSearchRes.json();
-                  const bpEv = (bpSearch.events || []).find(e => {
-                    const n = (e.name || '').toLowerCase();
-                    return n.includes(teamQuery.toLowerCase());
-                  });
-                  if (bpEv) {
-                    bpEvId = bpEv.id;
-                    this.betpawaEventCache.set(teamQuery, bpEvId);
+                  const candidates = bpSearch.events || [];
+
+                  for (const cand of candidates) {
+                    if (cand.category?.name && cand.category.name.toLowerCase() !== 'football') {
+                      continue;
+                    }
+
+                    const candP1 = cand.participants?.[0]?.name;
+                    const candP2 = cand.participants?.[1]?.name;
+                    let candHome = candP1;
+                    let candAway = candP2;
+                    if (!candHome || !candAway) {
+                      const parts = (cand.name || '').split(/\s+-\s+|\s+vs\.?\s+/i);
+                      candHome = parts[0]?.trim();
+                      candAway = parts[1]?.trim();
+                    }
+                    if (!candHome || !candAway) continue;
+
+                    // Rigorous verification: checks teams, league/competition, gender, kickoff
+                    const matches = isMatchEqual(
+                      {
+                        homeTeam: ev.homeTeamName,
+                        awayTeam: ev.awayTeamName,
+                        competition: spComp,
+                        country: spCountry,
+                        startTime: new Date(ev.estimateStartTime).toISOString()
+                      },
+                      {
+                        homeTeam: candHome,
+                        awayTeam: candAway,
+                        competition: cand.competition?.name,
+                        country: cand.region?.name,
+                        startTime: cand.startTime
+                      }
+                    );
+
+                    if (matches) {
+                      bpEv = {
+                        ...cand,
+                        verifiedHome: candHome,
+                        verifiedAway: candAway
+                      };
+                      break;
+                    }
                   }
+
+                  this.betpawaEventCache.set(fixtureCacheKey, bpEv);
                 }
               }
 
-              if (bpEvId) {
+              if (bpEv) {
+                const bpEvId = bpEv.id;
                 const bpEvRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v4/events/${bpEvId}`, { headers: bpHeaders });
                 if (bpEvRes.ok) {
                   const bpFull = await bpEvRes.json();
@@ -898,12 +949,17 @@ export class LiveFeedManager {
                   }
 
                   if (bpMarkets.length > 0) {
+                    const realBpHome = bpEv.verifiedHome || bpEv.participants?.[0]?.name || ev.homeTeamName;
+                    const realBpAway = bpEv.verifiedAway || bpEv.participants?.[1]?.name || ev.awayTeamName;
+                    const realBpComp = bpFull.competition?.name || bpEv.competition?.name || spComp;
+
                     betpawaMatches.push({
                       id: bpFull.id || bpEvId,
-                      homeTeam: ev.homeTeamName,
-                      awayTeam: ev.awayTeamName,
+                      homeTeam: realBpHome,
+                      awayTeam: realBpAway,
                       sport: 'Football',
-                      competition: bpFull.competition?.name || ev.tournamentName,
+                      competition: realBpComp,
+                      country: bpEv.region?.name || spCountry,
                       startTime: bpFull.startTime || new Date(ev.estimateStartTime).toISOString(),
                       dateStr: new Date(ev.estimateStartTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
                       isLive: false,

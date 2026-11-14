@@ -48,6 +48,7 @@ test('formatTelegramAlert produces clean, readable mobile alert with 1-tap copy 
   // Assertions for clean structure without booking codes
   assert(message.includes('🎯 <b>ARBITRAGE ALERT (+5.97% ROI)</b>'));
   assert(message.includes('⚽ <b>Arsenal FC vs Chelsea FC</b>'));
+  assert(message.includes('🏆 <b>League:</b> Premier League'));
   assert(message.includes('Total 3.5'));
   assert(message.includes('• <b>Betpawa Ghana</b>: Over 3.5 @ <b>3.50</b>'));
   assert(message.includes('👉 Stake: <b>GHS 30.29</b>'));

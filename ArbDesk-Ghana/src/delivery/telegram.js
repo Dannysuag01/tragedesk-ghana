@@ -38,7 +38,7 @@ export function formatTelegramAlert(arb, arbIndex = 1) {
 
   const home = escapeHtml(match.homeTeam || 'Home Team');
   const away = escapeHtml(match.awayTeam || 'Away Team');
-  const comp = escapeHtml(match.competition || 'Soccer');
+  const comp = escapeHtml(match.competition || match.tournamentName || match.league || 'Football');
   const dateStr = escapeHtml(match.dateStr || 'Upcoming');
   const marketName = escapeHtml(market);
   const lineStr = line ? ` • <i>${escapeHtml(line)}</i>` : '';
@@ -59,7 +59,8 @@ export function formatTelegramAlert(arb, arbIndex = 1) {
   return `🎯 <b>ARBITRAGE ALERT (+${roi}% ROI)</b>
 ━━━━━━━━━━━━━━━━━━━━━
 ⚽ <b>${home} vs ${away}</b>
-🏆 ${comp} • ${dateStr}
+🏆 <b>League:</b> ${comp}
+📅 <b>Kickoff:</b> ${dateStr}
 📋 <b>Market:</b> ${marketName}${lineStr}
 
 💵 <b>Staking Plan (${currency} ${totalStake})</b>
