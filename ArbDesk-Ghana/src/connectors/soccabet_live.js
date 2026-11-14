@@ -4,6 +4,9 @@ import { BaseBookmaker } from './base.js';
  * Soccabet Ghana Connector
  * Connects to Soccabet Ghana's public sports interface.
  * Employs direct 1-click match betslip routing (no broken booking codes).
+ *
+ * Includes failure cooldown: if all endpoints fail, suppresses retries
+ * for 5 minutes to avoid flooding logs every 3 seconds.
  */
 export class SoccabetLiveConnector extends BaseBookmaker {
   constructor() {
@@ -14,6 +17,11 @@ export class SoccabetLiveConnector extends BaseBookmaker {
       'Referer': 'https://www.soccabet.com/',
       'Origin': 'https://www.soccabet.com'
     };
+
+    // Cooldown after repeated failures
+    this._blockedUntil = 0;
+    this._BLOCK_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+    this._consecutiveFailures = 0;
   }
 
   /**
@@ -81,9 +89,15 @@ export class SoccabetLiveConnector extends BaseBookmaker {
    * Fetches real upcoming pre-match fixtures from Soccabet.
    * Tries multiple endpoints; first successful, non-empty response wins.
    * Returns [] without throwing if all endpoints fail.
+   * Enters 5-minute cooldown after 3 consecutive total failures.
    * @returns {Promise<Array<Object>>}
    */
   async fetchOdds() {
+    // Fast-exit during cooldown
+    if (Date.now() < this._blockedUntil) {
+      return [];
+    }
+
     const endpoints = [
       'https://www.soccabet.com/api/v1/sportsbook/fixtures?sportId=1&take=50',
       'https://www.soccabet.com/api/v2/fixtures?sport=soccer&limit=50',
@@ -99,17 +113,14 @@ export class SoccabetLiveConnector extends BaseBookmaker {
 
         // Skip Cloudflare / auth-wall responses
         if (res.status === 403 || res.status === 429) {
-          console.debug(`[Soccabet] Skipping ${url} — status ${res.status}`);
           continue;
         }
         if (!res.ok) {
-          console.debug(`[Soccabet] Skipping ${url} — status ${res.status}`);
           continue;
         }
 
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('text/html')) {
-          console.debug(`[Soccabet] Skipping ${url} — HTML response (Cloudflare?)`);
           continue;
         }
 
@@ -117,7 +128,6 @@ export class SoccabetLiveConnector extends BaseBookmaker {
         try {
           data = await res.json();
         } catch {
-          console.debug(`[Soccabet] Skipping ${url} — invalid JSON`);
           continue;
         }
 
@@ -127,32 +137,36 @@ export class SoccabetLiveConnector extends BaseBookmaker {
           : (data.data || data.fixtures || data.events || data.results || []);
 
         if (!Array.isArray(rawList) || rawList.length === 0) {
-          console.debug(`[Soccabet] Skipping ${url} — empty payload`);
           continue;
         }
 
         const matches = rawList.map(f => this._parseFixture(f)).filter(Boolean);
         if (matches.length === 0) {
-          console.debug(`[Soccabet] Skipping ${url} — no parseable fixtures`);
           continue;
         }
 
-        console.log(`[Soccabet] Fetched ${matches.length} fixtures from ${url}`);
+        console.log(`[Soccabet] Fetched ${matches.length} fixtures`);
+        this._consecutiveFailures = 0; // Reset on success
         return matches;
 
       } catch (err) {
-        console.debug(`[Soccabet] Endpoint failed (${url}):`, err.message || err);
+        // Silently continue to next endpoint
       }
     }
 
-    console.debug('[Soccabet] All endpoints exhausted — returning []');
+    // All endpoints failed
+    this._consecutiveFailures++;
+    if (this._consecutiveFailures >= 3) {
+      // Log once, then go silent for 5 minutes
+      console.warn('[Soccabet] All endpoints failed 3× — entering 5 min cooldown');
+      this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+      this._consecutiveFailures = 0;
+    }
     return [];
   }
 
   /**
    * Generates direct betslip share URL for Soccabet Ghana.
-   * Since Soccabet retail codes require client cookie sessions,
-   * we provide direct 1-click event betslip deep links.
    */
   async generateBookingCode(selection = {}) {
     const query = selection.homeTeam || selection.selection || 'soccer';

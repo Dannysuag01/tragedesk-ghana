@@ -4,6 +4,9 @@ import { BaseBookmaker } from './base.js';
  * Betway Ghana Connector
  * Connects to Betway Ghana's sports catalog.
  * Employs direct 1-click match betslip routing (no broken booking codes).
+ *
+ * Includes failure cooldown: if all endpoints fail, suppresses retries
+ * for 5 minutes to avoid flooding logs every 3 seconds.
  */
 export class BetwayLiveConnector extends BaseBookmaker {
   constructor() {
@@ -14,6 +17,11 @@ export class BetwayLiveConnector extends BaseBookmaker {
       'Referer': 'https://www.betway.com.gh/',
       'Origin': 'https://www.betway.com.gh'
     };
+
+    // Cooldown after repeated failures
+    this._blockedUntil = 0;
+    this._BLOCK_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+    this._consecutiveFailures = 0;
   }
 
   /**
@@ -99,14 +107,19 @@ export class BetwayLiveConnector extends BaseBookmaker {
    * Fetches real upcoming pre-match events from Betway Ghana.
    * Tries multiple endpoints; first successful, non-empty response wins.
    * Returns [] without throwing if all endpoints fail.
+   * Enters 5-minute cooldown after 3 consecutive total failures.
    * @returns {Promise<Array<Object>>}
    */
   async fetchOdds() {
+    // Fast-exit during cooldown
+    if (Date.now() < this._blockedUntil) {
+      return [];
+    }
+
     const endpoints = [
       'https://www.betway.com.gh/api/v1/sports/events?sportId=soccer&take=50',
       'https://sports.betway.com.gh/api/sports/soccer/events?take=50',
       'https://bwgh-api.betway.com/v1/events?sport=soccer&limit=50&status=prematch'
-      // https://www.betway.com.gh/Sports/Default.aspx is HTML — skipped by design
     ];
 
     for (const url of endpoints) {
@@ -118,17 +131,14 @@ export class BetwayLiveConnector extends BaseBookmaker {
 
         // Skip Cloudflare / auth-wall responses
         if (res.status === 403 || res.status === 429) {
-          console.debug(`[Betway] Skipping ${url} — status ${res.status}`);
           continue;
         }
         if (!res.ok) {
-          console.debug(`[Betway] Skipping ${url} — status ${res.status}`);
           continue;
         }
 
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('text/html')) {
-          console.debug(`[Betway] Skipping ${url} — HTML response (Cloudflare?)`);
           continue;
         }
 
@@ -136,7 +146,6 @@ export class BetwayLiveConnector extends BaseBookmaker {
         try {
           data = await res.json();
         } catch {
-          console.debug(`[Betway] Skipping ${url} — invalid JSON`);
           continue;
         }
 
@@ -146,31 +155,35 @@ export class BetwayLiveConnector extends BaseBookmaker {
           : (data.events || data.data || data.results || []);
 
         if (!Array.isArray(rawList) || rawList.length === 0) {
-          console.debug(`[Betway] Skipping ${url} — empty payload`);
           continue;
         }
 
         const matches = rawList.map(ev => this._parseEvent(ev)).filter(Boolean);
         if (matches.length === 0) {
-          console.debug(`[Betway] Skipping ${url} — no parseable events`);
           continue;
         }
 
-        console.log(`[Betway] Fetched ${matches.length} events from ${url}`);
+        console.log(`[Betway] Fetched ${matches.length} events`);
+        this._consecutiveFailures = 0; // Reset on success
         return matches;
 
       } catch (err) {
-        console.debug(`[Betway] Endpoint failed (${url}):`, err.message || err);
+        // Silently continue to next endpoint
       }
     }
 
-    console.debug('[Betway] All endpoints exhausted — returning []');
+    // All endpoints failed
+    this._consecutiveFailures++;
+    if (this._consecutiveFailures >= 3) {
+      console.warn('[Betway] All endpoints failed 3× — entering 5 min cooldown');
+      this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+      this._consecutiveFailures = 0;
+    }
     return [];
   }
 
   /**
    * Generates direct betslip share URL for Betway Ghana.
-   * Direct deep-link routing to the exact match or search on Betway Ghana.
    */
   async generateBookingCode(selection = {}) {
     const query = selection.homeTeam || selection.selection || 'soccer';

@@ -2,9 +2,12 @@ import { BaseBookmaker } from './base.js';
 
 /**
  * 1xBet Ghana Connector
- * Connects directly to 1xBet Ghana's public pre-match service API
- * Strictly Pre-Match Only (Filters out live fixtures)
- * Dynamically discovers upcoming football matches via bulk endpoints.
+ * Connects directly to 1xBet Ghana's public pre-match service API.
+ * Strictly Pre-Match Only (Filters out live fixtures).
+ * Dynamically discovers upcoming matches via bulk endpoints.
+ *
+ * If all endpoints return HTML (Cloudflare challenge), the connector
+ * backs off for 5 minutes before retrying to avoid wasting scan time.
  */
 export class OneXBetLiveConnector extends BaseBookmaker {
   constructor() {
@@ -18,6 +21,20 @@ export class OneXBetLiveConnector extends BaseBookmaker {
     this._cachedEventIds = null;
     this._cacheTimestamp = 0;
     this._cacheTTL = 15_000; // ms
+
+    // Cloudflare/HTML-block cooldown: skip entirely for 5 min after detection
+    this._blockedUntil = 0;
+    this._BLOCK_COOLDOWN = 5 * 60 * 1000;
+    this._consecutiveHtmlFailures = 0;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Helper: detect HTML (Cloudflare) responses
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _isHtmlResponse(res) {
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    return ct.includes('text/html');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -25,7 +42,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
-   * Try the three bulk endpoints in order and return the first successfully
+   * Try multiple bulk endpoints in order and return the first successfully
    * parsed list of game IDs (integers).
    * @returns {Promise<number[]>}
    */
@@ -35,9 +52,10 @@ export class OneXBetLiveConnector extends BaseBookmaker {
       `${this.baseUrl}/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
       `${this.baseUrl}/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
       `${this.baseUrl}/service-api/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
-      `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
-      `${this.baseUrl}/LineFeed/GetInformationForSport?sportId=1&lng=en&count=50&isLive=false`
+      `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`
     ];
+
+    let htmlCount = 0;
 
     for (const url of endpoints) {
       try {
@@ -47,13 +65,36 @@ export class OneXBetLiveConnector extends BaseBookmaker {
         });
         if (!res.ok) continue;
 
+        // Detect Cloudflare HTML challenge — stop trying further endpoints
+        if (this._isHtmlResponse(res)) {
+          htmlCount++;
+          if (htmlCount >= 2) {
+            // Two HTML responses in a row = definitely Cloudflare-blocked
+            console.warn('[1xBet Ghana] Cloudflare block detected — entering cooldown');
+            this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+            this._consecutiveHtmlFailures++;
+            return [];
+          }
+          continue;
+        }
+
         const data = await res.json();
         const ids = this._parseEventIds(data);
         if (ids && ids.length > 0) {
+          this._consecutiveHtmlFailures = 0; // Reset on success
           return ids;
         }
       } catch (err) {
-        console.warn(`[1xBet Ghana] Bulk endpoint failed (${url}):`, err.message);
+        // JSON parse error on HTML body or network failure
+        if (err.message && err.message.includes('<!DOCTYPE')) {
+          htmlCount++;
+          if (htmlCount >= 2) {
+            console.warn('[1xBet Ghana] Cloudflare block detected — entering cooldown');
+            this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+            this._consecutiveHtmlFailures++;
+            return [];
+          }
+        }
       }
     }
 
@@ -64,13 +105,18 @@ export class OneXBetLiveConnector extends BaseBookmaker {
    * Extract game IDs from the varying response structures.
    * - Flat array: data.Value = [{I: id, ...}, ...]
    * - Grouped:    data.Value.GC = [{E: [{I: id}], ...}, ...]
-   * - Or data itself is an array of events
    */
   _parseEventIds(data) {
     const ids = [];
 
     const extractFromEvent = (e) => {
-      if (e && (e.I || e.id)) ids.push(e.I || e.id);
+      if (e && (e.I || e.id)) {
+        const id = e.I || e.id;
+        // Sanity: real event IDs are large numbers (>1000), not sport category IDs
+        if (typeof id === 'number' && id > 100) {
+          ids.push(id);
+        }
+      }
     };
 
     try {
@@ -108,6 +154,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
 
   /**
    * Returns cached event IDs if still fresh, otherwise fetches them.
+   * Never uses stale cache — if discovery fails, returns [].
    * @returns {Promise<number[]>}
    */
   async _getEventIds() {
@@ -117,20 +164,19 @@ export class OneXBetLiveConnector extends BaseBookmaker {
     }
 
     const ids = await this._fetchEventIds();
-    if (ids.length > 0) {
-      this._cachedEventIds = ids;
-      this._cacheTimestamp = now;
-    } else {
-      console.warn('[1xBet Ghana] All bulk endpoints failed; using empty game list.');
-      // Keep stale cache if available
-      if (this._cachedEventIds === null) this._cachedEventIds = [];
+    // Always update cache — empty list means blocked, don't keep stale data
+    this._cachedEventIds = ids;
+    this._cacheTimestamp = now;
+
+    if (ids.length === 0) {
+      // Silently return empty; the cooldown will suppress further attempts
     }
 
     return this._cachedEventIds;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Market extraction helpers (unchanged logic from original)
+  // Market extraction helpers
   // ─────────────────────────────────────────────────────────────────────────
 
   _extractMarkets(g) {
@@ -298,11 +344,15 @@ export class OneXBetLiveConnector extends BaseBookmaker {
 
   /**
    * Fetches real-time upcoming pre-match fixtures from 1xBet Ghana.
-   * Dynamically discovers event IDs from bulk endpoints, then fetches
-   * individual game zips (limited to first 30 to avoid timeouts).
+   * If Cloudflare-blocked, returns [] immediately (cooldown enforced).
    * @returns {Promise<Array<Object>>}
    */
   async fetchOdds() {
+    // Fast-exit if we're in Cloudflare cooldown
+    if (Date.now() < this._blockedUntil) {
+      return [];
+    }
+
     const matches = [];
 
     // --- 1. Discover event IDs (cached for 15 s) ---------------------------
@@ -314,25 +364,47 @@ export class OneXBetLiveConnector extends BaseBookmaker {
       eventIds = [];
     }
 
+    if (eventIds.length === 0) return [];
+
     // Limit to first 30 to avoid Render timeout
     const idsToFetch = eventIds.slice(0, 30);
+    let htmlHits = 0;
 
     // --- 2. Fetch individual game zips -------------------------------------
     for (const gameId of idsToFetch) {
       try {
-        let res = await fetch(
+        const res = await fetch(
           `${this.baseUrl}/LineFeed/GetGameZip?id=${gameId}&lng=en`,
           { headers: this.headers, signal: AbortSignal.timeout(2500) }
-        ).catch(() => null);
-        if (!res || !res.ok) {
-          res = await fetch(
-            `${this.baseUrl}/service-api/LineFeed/GetGameZip?id=${gameId}&lng=en`,
-            { headers: this.headers, signal: AbortSignal.timeout(2500) }
-          ).catch(() => null);
-        }
+        );
+
         if (!res || !res.ok) continue;
 
-        const data = await res.json();
+        // Detect HTML / Cloudflare challenge — stop fetching more games
+        if (this._isHtmlResponse(res)) {
+          htmlHits++;
+          if (htmlHits >= 2) {
+            console.warn('[1xBet Ghana] Cloudflare block detected on game fetch — entering cooldown');
+            this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+            break;
+          }
+          continue;
+        }
+
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          // HTML body returned as 200 — treat as Cloudflare
+          htmlHits++;
+          if (htmlHits >= 2) {
+            this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+            break;
+          }
+          continue;
+        }
+
         const g = data.Value;
         if (!g || !g.O1 || !g.O2) continue;
 
@@ -370,7 +442,15 @@ export class OneXBetLiveConnector extends BaseBookmaker {
           markets
         });
       } catch (err) {
-        console.warn(`[1xBet Ghana] Match fetch error for ${gameId}:`, err.message);
+        // Detect HTML parse failures without spamming 30 log lines
+        if (err.message && err.message.includes('<!DOCTYPE')) {
+          htmlHits++;
+          if (htmlHits >= 2) {
+            console.warn('[1xBet Ghana] Cloudflare block detected — entering 5 min cooldown');
+            this._blockedUntil = Date.now() + this._BLOCK_COOLDOWN;
+            break;
+          }
+        }
       }
     }
 
@@ -383,7 +463,6 @@ export class OneXBetLiveConnector extends BaseBookmaker {
 
   /**
    * Generates a direct event URL / betslip reference for 1xBet Ghana.
-   * Uses the actual event ID and competition name from the selection.
    * @param {Object} selection
    * @returns {Promise<{code: string, shareUrl: string}>}
    */
