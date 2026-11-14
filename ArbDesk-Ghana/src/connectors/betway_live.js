@@ -44,11 +44,12 @@ export class BetwayLiveConnector extends BaseBookmaker {
             })).filter(o => o.odds > 1)
           });
         } else if ((type === 'over_under' || type === 'totals') && Array.isArray(m.outcomes) && m.outcomes.length >= 2) {
+          const ouLine = m.line || 2.5;
           markets.push({
             id: String(m.id || '2'),
-            type: 'over_under',
-            name: m.name || `Over/Under ${m.line || 2.5}`,
-            line: String(m.line || 2.5),
+            type: `over_under_${ouLine}`,
+            name: 'Over/Under Goals',
+            line: `Total ${ouLine}`,
             outcomes: m.outcomes.map(o => ({
               id: String(o.id),
               name: o.name,

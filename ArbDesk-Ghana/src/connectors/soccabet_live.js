@@ -52,9 +52,9 @@ export class SoccabetLiveConnector extends BaseBookmaker {
     if (over > 1 && under > 1) {
       markets.push({
         id: '2',
-        type: 'over_under',
-        name: `Over/Under ${ouLine}`,
-        line: String(ouLine),
+        type: `over_under_${ouLine}`,
+        name: 'Over/Under Goals',
+        line: `Total ${ouLine}`,
         outcomes: [
           { id: `${f.id}_over`, name: `Over ${ouLine}`, odds: over },
           { id: `${f.id}_under`, name: `Under ${ouLine}`, odds: under }

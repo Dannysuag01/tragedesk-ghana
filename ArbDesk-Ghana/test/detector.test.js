@@ -425,3 +425,109 @@ test('strictly rejects non-profitable opportunities when odds drop (e.g. Betpawa
   const reducedOpps = await detector.findOpportunities(reducedOddsFeeds);
   assert.strictEqual(reducedOpps.length, 0, 'Must NOT show or return opportunity when odds drop and profit is gone');
 });
+
+test('never matches half-time or corner markets against full-time markets', async () => {
+  const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
+
+  const feeds = [
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Arsenal',
+        awayTeam: 'Chelsea',
+        sport: 'Football',
+        markets: [
+          // 1st Half Over 1.5 @ 2.50
+          {
+            id: '5068',
+            type: '1h_over_under_1.5',
+            name: '1st Half Over/Under',
+            line: '1H Total 1.5',
+            outcomes: [
+              { id: 'bp_1h_o', name: '1H Over 1.5', odds: 2.50 },
+              { id: 'bp_1h_u', name: '1H Under 1.5', odds: 1.55 }
+            ]
+          }
+        ]
+      }]
+    },
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Arsenal',
+        awayTeam: 'Chelsea',
+        sport: 'Football',
+        markets: [
+          // Full Time Under 1.5 @ 4.00
+          {
+            id: '18',
+            type: 'over_under_1.5',
+            name: 'Over/Under Goals',
+            line: 'Total 1.5',
+            outcomes: [
+              { id: 'sp_ft_o', name: 'Over 1.5', odds: 1.25 },
+              { id: 'sp_ft_u', name: 'Under 1.5', odds: 4.00 }
+            ]
+          }
+        ]
+      }]
+    }
+  ];
+
+  // 1H Over 1.5 @ 2.50 + FT Under 1.5 @ 4.00 would mathematically look like an arb if types collided
+  // BUT THEY ARE DIFFERENT PERIODS! 1H Over 1.5 vs FT Under 1.5 must NEVER pair!
+  const opps = await detector.findOpportunities(feeds);
+  assert.strictEqual(opps.length, 0, 'Must NEVER cross-pair 1st Half with Full Time markets');
+});
+
+test('never matches Team Totals against Match Totals', async () => {
+  const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
+
+  const feeds = [
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Liverpool',
+        awayTeam: 'Everton',
+        sport: 'Football',
+        markets: [
+          // Home Team Over 1.5 @ 2.20
+          {
+            id: '5019',
+            type: 'home_total_1.5',
+            name: 'Home Total Goals',
+            line: 'Home Total 1.5',
+            outcomes: [
+              { id: 'bp_ht_o', name: 'Home Over 1.5', odds: 2.20 },
+              { id: 'bp_ht_u', name: 'Home Under 1.5', odds: 1.65 }
+            ]
+          }
+        ]
+      }]
+    },
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Liverpool',
+        awayTeam: 'Everton',
+        sport: 'Football',
+        markets: [
+          // Match Under 1.5 @ 3.80
+          {
+            id: '18',
+            type: 'over_under_1.5',
+            name: 'Over/Under Goals',
+            line: 'Total 1.5',
+            outcomes: [
+              { id: 'sp_ft_o', name: 'Over 1.5', odds: 1.28 },
+              { id: 'sp_ft_u', name: 'Under 1.5', odds: 3.80 }
+            ]
+          }
+        ]
+      }]
+    }
+  ];
+
+  const opps = await detector.findOpportunities(feeds);
+  assert.strictEqual(opps.length, 0, 'Must NEVER cross-pair Home Team Total with Match Total');
+});

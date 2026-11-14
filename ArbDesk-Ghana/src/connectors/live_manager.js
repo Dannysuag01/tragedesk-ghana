@@ -282,8 +282,8 @@ export class LiveFeedManager {
           }
         }
 
-        // H. Asian Handicap (2-Way)
-        if ((m.id === '64' || mDesc.includes('asian handicap')) && m.specifier?.includes('hcp=')) {
+        // H. Asian Handicap (2-Way Full Time only - strictly exclude corners, cards, halves)
+        if ((m.id === '64' || mDesc.includes('asian handicap')) && !mDesc.includes('corner') && !mDesc.includes('card') && !mDesc.includes('1st') && !mDesc.includes('2nd') && !mDesc.includes('half') && m.specifier?.includes('hcp=')) {
           const hcp = m.specifier.replace(/.*hcp=([^&]+).*/, '$1').trim();
           const h = m.outcomes?.find(o => o.desc?.toLowerCase() === 'home' || o.desc?.toLowerCase() === '1');
           const a = m.outcomes?.find(o => o.desc?.toLowerCase() === 'away' || o.desc?.toLowerCase() === '2');
@@ -303,8 +303,8 @@ export class LiveFeedManager {
           }
         }
 
-        // I. European Handicap (3-Way)
-        if ((m.id === '16' || mDesc.includes('handicap')) && m.specifier?.includes('hcp=')) {
+        // I. European Handicap (3-Way Full Time only - strictly exclude corners, cards, halves)
+        if ((m.id === '16' || mDesc.includes('handicap')) && !mDesc.includes('corner') && !mDesc.includes('card') && !mDesc.includes('1st') && !mDesc.includes('2nd') && !mDesc.includes('half') && m.specifier?.includes('hcp=')) {
           const hcp = m.specifier.replace(/.*hcp=([^&]+).*/, '$1').trim();
           const h = m.outcomes?.find(o => o.desc?.toLowerCase() === 'home' || o.desc?.toLowerCase() === '1');
           const d = m.outcomes?.find(o => o.desc?.toLowerCase() === 'draw' || o.desc?.toLowerCase() === 'x');
@@ -723,8 +723,11 @@ return [
             }
           }
 
-          // B. Betpawa All Over/Under Lines (0.5, 1.5, 2.5, 3.5, 4.5, 5.5)
-          const ouMkt = bpFull.markets?.find(bm => (bm.marketType?.name || '').toLowerCase().includes('total score over/under'));
+          // B. Betpawa All Over/Under Lines (0.5, 1.5, 2.5, 3.5, 4.5, 5.5) Full Time
+          const ouMkt = bpFull.markets?.find(bm => {
+            const n = (bm.marketType?.name || '').toLowerCase();
+            return n.includes('total score over/under') && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h') && !n.includes('half');
+          });
           if (ouMkt) {
             const handicapGroups = new Map();
             for (const r of ouMkt.row || []) {
@@ -754,8 +757,11 @@ return [
             }
           }
 
-          // C. Betpawa Both Teams To Score
-          const bttsMkt = bpFull.markets?.find(bm => (bm.marketType?.name || '').toLowerCase().includes('both teams to score'));
+          // C. Betpawa Both Teams To Score (Full Time only)
+          const bttsMkt = bpFull.markets?.find(bm => {
+            const n = (bm.marketType?.name || '').toLowerCase();
+            return n.includes('both teams to score') && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h') && !n.includes('half');
+          });
           if (bttsMkt) {
             let yesPrice, noPrice;
             for (const r of bttsMkt.row || []) {
@@ -806,8 +812,11 @@ return [
             }
           }
 
-          // E. Betpawa Draw No Bet
-          const bpDnb = bpFull.markets?.find(bm => (bm.marketType?.name || '').toLowerCase().includes('draw no bet'));
+          // E. Betpawa Draw No Bet (Full Time only)
+          const bpDnb = bpFull.markets?.find(bm => {
+            const n = (bm.marketType?.name || '').toLowerCase();
+            return n.includes('draw no bet') && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h') && !n.includes('half');
+          });
           if (bpDnb) {
             let hPrice, aPrice;
             for (const r of bpDnb.row || []) {
@@ -831,8 +840,11 @@ return [
             }
           }
 
-          // F. Betpawa Double Chance
-          const bpDc = bpFull.markets?.find(bm => (bm.marketType?.name || '').toLowerCase().includes('double chance'));
+          // F. Betpawa Double Chance (Full Time only)
+          const bpDc = bpFull.markets?.find(bm => {
+            const n = (bm.marketType?.name || '').toLowerCase();
+            return (n === 'double chance - ft' || n === 'double chance') && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h') && !n.includes('half') && !n.includes('both') && !n.includes('total') && !n.includes('1up') && !n.includes('2up');
+          });
           if (bpDc) {
             let hxPrice, haPrice, axPrice;
             for (const r of bpDc.row || []) {
@@ -859,9 +871,12 @@ return [
             }
           }
 
-          // G. Betpawa Handicaps (Asian & European)
+          // G. Betpawa Handicaps (Asian & European Full Time only - strictly exclude corners, cards, halves)
           const bpHcp = bpFull.markets?.filter(bm => {
             const n = (bm.marketType?.name || '').toLowerCase();
+            if (n.includes('corner') || n.includes('card') || n.includes('booking') || n.includes('foul') || n.includes('1h') || n.includes('2h') || n.includes('half') || n.includes('period') || n.includes('1up') || n.includes('2up')) {
+              return false;
+            }
             return n.includes('handicap');
           });
           for (const bm of bpHcp || []) {
@@ -933,10 +948,10 @@ return [
             }
           }
 
-          // H. Betpawa Team 1 (Home) Total Goals
+          // H. Betpawa Team 1 (Home) Total Goals (Full Time only)
           const bpHtOu = bpFull.markets?.find(bm => {
             const n = (bm.marketType?.name || '').toLowerCase();
-            return n.includes('team 1 total') || n.includes('home total');
+            return (n.includes('team 1 total') || n.includes('home total')) && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h') && !n.includes('half');
           });
           if (bpHtOu) {
             const hGroups = new Map();
@@ -966,10 +981,10 @@ return [
             }
           }
 
-          // I. Betpawa Team 2 (Away) Total Goals
+          // I. Betpawa Team 2 (Away) Total Goals (Full Time only)
           const bpAtOu = bpFull.markets?.find(bm => {
             const n = (bm.marketType?.name || '').toLowerCase();
-            return n.includes('team 2 total') || n.includes('away total');
+            return (n.includes('team 2 total') || n.includes('away total')) && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h') && !n.includes('half');
           });
           if (bpAtOu) {
             const aGroups = new Map();
@@ -999,8 +1014,11 @@ return [
             }
           }
 
-          // J. Betpawa Odd/Even Total Goals
-          const bpOddEven = bpFull.markets?.find(bm => (bm.marketType?.name || '').toLowerCase().includes('odd/even'));
+          // J. Betpawa Odd/Even Total Goals (Full Time only)
+          const bpOddEven = bpFull.markets?.find(bm => {
+            const n = (bm.marketType?.name || '').toLowerCase();
+            return n.includes('odd/even') && !n.includes('corner') && !n.includes('card') && !n.includes('1h') && !n.includes('2h');
+          });
           if (bpOddEven) {
             let oddP, evenP;
             for (const r of bpOddEven.row || []) {

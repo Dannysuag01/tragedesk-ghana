@@ -169,15 +169,15 @@ export class OneXBetLiveConnector extends BaseBookmaker {
     // 2. Over/Under - full-time (any total line including Basketball/Tennis)
     const seenLines = new Set();
     const candidateLines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-    // Gather all distinct P values from over/under entries
+    // Gather all distinct P values from full-time over/under entries (strictly exclude 1st half G=2, 2nd half G=3, corners)
     for (const e of g.E) {
-      if ((e.T === 7 || e.T === 9) && typeof e.P === 'number') candidateLines.push(e.P);
+      if ((!e.G || e.G === 1 || e.G === 17) && (e.T === 7 || e.T === 9) && typeof e.P === 'number') candidateLines.push(e.P);
     }
     for (const line of candidateLines) {
       if (seenLines.has(line)) continue;
       seenLines.add(line);
-      const over  = g.E.find(e => (e.T === 7 || e.T === 9)  && e.P === line);
-      const under = g.E.find(e => (e.T === 8 || e.T === 10) && e.P === line);
+      const over  = g.E.find(e => (!e.G || e.G === 1 || e.G === 17) && (e.T === 7 || e.T === 9)  && e.P === line);
+      const under = g.E.find(e => (!e.G || e.G === 1 || e.G === 17) && (e.T === 8 || e.T === 10) && e.P === line);
       if (over && under) {
         markets.push({
           id: '18',
