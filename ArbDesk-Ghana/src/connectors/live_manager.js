@@ -49,8 +49,6 @@ export class LiveFeedManager {
     const oneXMatches = [];
     const validSpEvents = [];
 
-    const spHeaders = this.connectors['Sportybet'].headers;
-    const bpHeaders = this.connectors['Betpawa Ghana'].headers;
     const spHeaders = {
       ...this.connectors['Sportybet'].headers,
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -73,43 +71,39 @@ export class LiveFeedManager {
     // 1. Fetch real matches from SportyBet (up to 7 days / 168 hours across all active sports)
     try {
       let spEvents = this.cachedSportyEvents;
-      if (Date.now() - this.lastSportyFetch > 10000 || spEvents.length === 0) {
-        if (Date.now() - this.lastSportyFetch > 3000 || spEvents.length === 0) {
-          const allFetchedEvents = [];
-          for (const sport of SPORT_CATALOG) {
-            try {
-              // Query SportyBet with 168 hours (7 days) horizon per sport
-              const spRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&timeFrame=168`, {
-                // Query SportyBet with 168 hours (7 days) horizon per sport + cache buster
-                const spRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&timeFrame=168&_t=${Date.now()}`, {
-                  headers: spHeaders,
-                  signal: AbortSignal.timeout(6000)
-                });
-                if(spRes.ok) {
-                  const spJson = await spRes.json();
+      if (Date.now() - this.lastSportyFetch > 3000 || spEvents.length === 0) {
+        const allFetchedEvents = [];
+        for (const sport of SPORT_CATALOG) {
+          try {
+            // Query SportyBet with 168 hours (7 days) horizon per sport + cache buster
+            const spRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&timeFrame=168&_t=${Date.now()}`, {
+              headers: spHeaders,
+              signal: AbortSignal.timeout(6000)
+            });
+            if (spRes.ok) {
+              const spJson = await spRes.json();
               const evList = (spJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
               allFetchedEvents.push(...evList);
             } else {
               // Fallback to standard upcoming feed if 168h query is not supported
-              const fbRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}`, {
-                const fbRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&_t=${Date.now()}`, {
-                  headers: spHeaders,
-                  signal: AbortSignal.timeout(6000)
-                });
-                if(fbRes.ok) {
-                  const fbJson = await fbRes.json();
-              const evList = (fbJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
-              allFetchedEvents.push(...evList);
+              const fbRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&_t=${Date.now()}`, {
+                headers: spHeaders,
+                signal: AbortSignal.timeout(6000)
+              });
+              if (fbRes.ok) {
+                const fbJson = await fbRes.json();
+                const evList = (fbJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
+                allFetchedEvents.push(...evList);
+              }
             }
+          } catch (e) {
+            // Silently skip if a single sport times out
           }
-        } catch (e) {
-          // Silently skip if a single sport times out
         }
+        spEvents = allFetchedEvents;
+        this.cachedSportyEvents = spEvents;
+        this.lastSportyFetch = Date.now();
       }
-      spEvents = allFetchedEvents;
-      this.cachedSportyEvents = spEvents;
-      this.lastSportyFetch = Date.now();
-    }
 
       const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const nowMs = Date.now();
@@ -601,10 +595,9 @@ return [
         bpEv = cached.data;
       } else {
         bpEv = null;
-        const bpSearchRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(teamQuery)}`, { headers: bpHeaders });
         const bpSearchRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(teamQuery)}&_t=${Date.now()}`, {
           headers: bpHeaders,
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(3500)
         });
         if (bpSearchRes.ok) {
           const bpSearch = await bpSearchRes.json();
@@ -667,10 +660,9 @@ return [
 
       if (bpEv) {
         const bpEvId = bpEv.id;
-        const bpEvRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v4/events/${bpEvId}`, { headers: bpHeaders });
         const bpEvRes = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v4/events/${bpEvId}?_t=${Date.now()}`, {
           headers: bpHeaders,
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(3500)
         });
         if (bpEvRes.ok) {
           const bpFull = await bpEvRes.json();
