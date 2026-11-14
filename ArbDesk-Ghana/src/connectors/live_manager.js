@@ -12,12 +12,16 @@ import { BetpawaLiveConnector } from './betpawa_live.js';
 import { OneXBetLiveConnector } from './1xbet_live.js';
 import { SoccabetLiveConnector } from './soccabet_live.js';
 import { BetwayLiveConnector } from './betway_live.js';
+import { PremierBetLiveConnector } from './premierbet_live.js';
+import { OddsApiLiveConnector } from './odds_api_live.js';
 import { isMatchEqual, cleanTeamName } from '../engine/normalizer.js';
 
 export class LiveFeedManager {
   constructor() {
     const socca = new SoccabetLiveConnector();
     const bway = new BetwayLiveConnector();
+    const pb = new PremierBetLiveConnector();
+    this.oddsApi = new OddsApiLiveConnector();
     this.connectors = {
       'Sportybet': new SportyBetLiveConnector(),
       'Betpawa Ghana': new BetpawaLiveConnector(),
@@ -25,7 +29,9 @@ export class LiveFeedManager {
       'Soccabet Ghana': socca,
       'Soccabet': socca,
       'Betway Ghana': bway,
-      'Betway': bway
+      'Betway': bway,
+      'PremierBet Ghana': pb,
+      'PremierBet': pb
     };
     this.betpawaEventCache = new Map();
     this.lastSportyFetch = 0;
@@ -65,7 +71,11 @@ export class LiveFeedManager {
       { id: 'sr:sport:2', name: 'Basketball' },
       { id: 'sr:sport:5', name: 'Tennis' },
       { id: 'sr:sport:20', name: 'Table Tennis' },
-      { id: 'sr:sport:4', name: 'Ice Hockey' }
+      { id: 'sr:sport:4', name: 'Ice Hockey' },
+      { id: 'sr:sport:6', name: 'Handball' },
+      { id: 'sr:sport:23', name: 'Volleyball' },
+      { id: 'sr:sport:3', name: 'Baseball' },
+      { id: 'sr:sport:12', name: 'Rugby' }
     ];
 
     // 1. Fetch real matches from SportyBet (up to 7 days / 168 hours across all active sports)
@@ -74,21 +84,36 @@ export class LiveFeedManager {
       if (Date.now() - this.lastSportyFetch > 3000 || spEvents.length === 0) {
         const allFetchedEvents = [];
         for (const sport of SPORT_CATALOG) {
+          // A. Popular marquee events (Premier League, Champions League, NBA, etc.)
           try {
-            // Query SportyBet with 168 hours (7 days) horizon per sport + cache buster
+            const popRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapPopularEvents?sportId=${sport.id}&_t=${Date.now()}`, {
+              headers: spHeaders,
+              signal: AbortSignal.timeout(4000)
+            });
+            if (popRes.ok) {
+              const popJson = await popRes.json();
+              const popList = (popJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
+              allFetchedEvents.push(...popList);
+            }
+          } catch (e) {
+            // Non-critical, continue
+          }
+
+          // B. Upcoming schedule events up to 7 days (168 hours)
+          try {
             const spRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&timeFrame=168&_t=${Date.now()}`, {
               headers: spHeaders,
-              signal: AbortSignal.timeout(6000)
+              signal: AbortSignal.timeout(5000)
             });
             if (spRes.ok) {
               const spJson = await spRes.json();
               const evList = (spJson.data || []).map(e => ({ ...e, defaultSport: sport.name }));
               allFetchedEvents.push(...evList);
             } else {
-              // Fallback to standard upcoming feed if 168h query is not supported
+              // Fallback to standard upcoming feed
               const fbRes = await fetch(`https://www.sportybet.com/api/gh/factsCenter/wapUpcomingEvents?sportId=${sport.id}&_t=${Date.now()}`, {
                 headers: spHeaders,
-                signal: AbortSignal.timeout(6000)
+                signal: AbortSignal.timeout(5000)
               });
               if (fbRes.ok) {
                 const fbJson = await fbRes.json();
@@ -100,7 +125,21 @@ export class LiveFeedManager {
             // Silently skip if a single sport times out
           }
         }
-        spEvents = allFetchedEvents;
+
+        // Deduplicate SportyBet events
+        const seenIds = new Set();
+        const uniqueEvents = [];
+        for (const ev of allFetchedEvents) {
+          const eid = ev.eventId || ev.id;
+          if (eid && !seenIds.has(eid)) {
+            seenIds.add(eid);
+            uniqueEvents.push(ev);
+          } else if (!eid) {
+            uniqueEvents.push(ev);
+          }
+        }
+
+        spEvents = uniqueEvents;
         this.cachedSportyEvents = spEvents;
         this.lastSportyFetch = Date.now();
       }
@@ -509,8 +548,8 @@ export class LiveFeedManager {
       }
     }
 
-    // 2. Concurrently Search & Map Betpawa Ghana matches in parallel batches of 8
-    const CHUNK_SIZE = 8;
+    // 2. Concurrently Search & Map Betpawa Ghana matches in parallel batches of 10
+    const CHUNK_SIZE = 10;
     for (let i = 0; i < validSpEvents.length; i += CHUNK_SIZE) {
       const chunk = validSpEvents.slice(i, i + CHUNK_SIZE);
       const settled = await Promise.allSettled(
@@ -526,45 +565,76 @@ export class LiveFeedManager {
     console.warn('[LiveFeedManager] SportyBet fetch error:', err.message);
   }
 
-    // 3. Fetch live 1xBet Ghana matches
+  // 3. Fetch live 1xBet & Betway lines (First check The Odds API if API key configured)
+  const betwayMatches = [];
+  if (this.oddsApi && this.oddsApi.isAvailable()) {
     try {
-  const oneX = await this.connectors['1xBet Ghana'].fetchOdds();
-  if (oneX && oneX.length > 0) {
-    oneXMatches.push(...oneX);
+      const aggregated = await this.oddsApi.fetchOddsByBookmakers();
+      if (aggregated['1xBet Ghana']?.length > 0) {
+        oneXMatches.push(...aggregated['1xBet Ghana']);
+      }
+      if (aggregated['Betway Ghana']?.length > 0) {
+        betwayMatches.push(...aggregated['Betway Ghana']);
+      }
+    } catch (err) {
+      console.warn('[LiveFeedManager] The Odds API error:', err.message);
+    }
   }
-} catch (err) {
-  console.warn('[LiveFeedManager] 1xBet fetch error:', err.message);
-}
 
-// 4. Fetch live Soccabet Ghana matches
-const soccabetMatches = [];
-try {
-  const socca = await this.connectors['Soccabet Ghana'].fetchOdds();
-  if (socca && socca.length > 0) {
-    soccabetMatches.push(...socca);
+  // Fallback: direct 1xBet Ghana connector
+  if (oneXMatches.length === 0) {
+    try {
+      const oneX = await this.connectors['1xBet Ghana'].fetchOdds();
+      if (oneX && oneX.length > 0) {
+        oneXMatches.push(...oneX);
+      }
+    } catch (err) {
+      console.warn('[LiveFeedManager] 1xBet fetch error:', err.message);
+    }
   }
-} catch (err) {
-  console.warn('[LiveFeedManager] Soccabet fetch error:', err.message);
-}
 
-// 5. Fetch live Betway Ghana matches
-const betwayMatches = [];
-try {
-  const bway = await this.connectors['Betway Ghana'].fetchOdds();
-  if (bway && bway.length > 0) {
-    betwayMatches.push(...bway);
+  // Fallback: direct Betway Ghana connector
+  if (betwayMatches.length === 0) {
+    try {
+      const bway = await this.connectors['Betway Ghana'].fetchOdds();
+      if (bway && bway.length > 0) {
+        betwayMatches.push(...bway);
+      }
+    } catch (err) {
+      console.warn('[LiveFeedManager] Betway fetch error:', err.message);
+    }
   }
-} catch (err) {
-  console.warn('[LiveFeedManager] Betway fetch error:', err.message);
-}
 
-return [
-  { bookmaker: 'Sportybet', matches: sportyMatches },
-  { bookmaker: 'Betpawa Ghana', matches: betpawaMatches },
-  { bookmaker: '1xBet Ghana', matches: oneXMatches },
-  { bookmaker: 'Soccabet Ghana', matches: soccabetMatches },
-  { bookmaker: 'Betway Ghana', matches: betwayMatches }
-];
+  // 4. Fetch live Soccabet Ghana matches
+  const soccabetMatches = [];
+  try {
+    const socca = await this.connectors['Soccabet Ghana'].fetchOdds();
+    if (socca && socca.length > 0) {
+      soccabetMatches.push(...socca);
+    }
+  } catch (err) {
+    console.warn('[LiveFeedManager] Soccabet fetch error:', err.message);
+  }
+
+  // 5. Fetch live PremierBet Ghana matches
+  const premierMatches = [];
+  try {
+    const pb = await this.connectors['PremierBet Ghana'].fetchOdds();
+    if (pb && pb.length > 0) {
+      premierMatches.push(...pb);
+    }
+  } catch (err) {
+    console.warn('[LiveFeedManager] PremierBet fetch error:', err.message);
+  }
+
+  return [
+    { bookmaker: 'Sportybet', matches: sportyMatches },
+    { bookmaker: 'Betpawa Ghana', matches: betpawaMatches },
+    { bookmaker: '1xBet Ghana', matches: oneXMatches },
+    { bookmaker: 'Soccabet Ghana', matches: soccabetMatches },
+    { bookmaker: 'Betway Ghana', matches: betwayMatches },
+    { bookmaker: 'PremierBet Ghana', matches: premierMatches }
+  ];
   }
 
   /**

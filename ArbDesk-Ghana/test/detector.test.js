@@ -583,3 +583,75 @@ test('never extracts or pairs Corner Asian Handicap or Half-Time Handicap agains
   const opps = await detector.findOpportunities(feeds);
   assert.strictEqual(opps.length, 0, 'Must NEVER pair Corner Asian Handicap (1st Half) against Full Time 1X2 Away Win');
 });
+
+test('detects multi-bookmaker arbitrage including PremierBet Ghana and Sportybet', async () => {
+  const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
+
+  const feeds = [
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Hearts of Oak',
+        awayTeam: 'Asante Kotoko',
+        sport: 'Football',
+        markets: [{
+          id: '1',
+          type: '1x2',
+          name: '1X2 (Full Time)',
+          outcomes: [
+            { id: 'sp_1', name: 'Home', odds: 3.20 },
+            { id: 'sp_x', name: 'Draw', odds: 3.40 },
+            { id: 'sp_2', name: 'Away', odds: 2.10 }
+          ]
+        }]
+      }]
+    },
+    {
+      bookmaker: 'PremierBet Ghana',
+      matches: [{
+        homeTeam: 'Hearts of Oak',
+        awayTeam: 'Asante Kotoko',
+        sport: 'Football',
+        markets: [{
+          id: '1',
+          type: '1x2',
+          name: '1X2 (Full Time)',
+          outcomes: [
+            { id: 'pb_1', name: 'Home', odds: 2.10 },
+            { id: 'pb_x', name: 'Draw', odds: 3.40 },
+            { id: 'pb_2', name: 'Away', odds: 3.30 }
+          ]
+        }]
+      }]
+    },
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Hearts of Oak',
+        awayTeam: 'Asante Kotoko',
+        sport: 'Football',
+        markets: [{
+          id: '1000',
+          type: '1x2',
+          name: '1X2 (Full Time)',
+          outcomes: [
+            { id: 'bp_1', name: 'Home', odds: 2.20 },
+            { id: 'bp_x', name: 'Draw', odds: 4.80 },
+            { id: 'bp_2', name: 'Away', odds: 2.20 }
+          ]
+        }]
+      }]
+    }
+  ];
+
+  // Best combination:
+  // Home: Sportybet @ 3.20 (inv = 0.3125)
+  // Draw: Betpawa @ 4.80 (inv = 0.2083)
+  // Away: PremierBet @ 3.30 (inv = 0.3030)
+  // Sum = 0.3125 + 0.2083 + 0.3030 = 0.8238 < 1.0 (Arbitrage! ~+17.6%)
+  const opps = await detector.findOpportunities(feeds);
+  const pbArb = opps.find(o => o.legs.some(l => l.bookmaker === 'PremierBet Ghana'));
+  assert(pbArb, 'Should detect 3-way arbitrage including PremierBet Ghana');
+  assert.strictEqual(pbArb.legs.length, 3);
+  assert(pbArb.marginPct > 15.0);
+});

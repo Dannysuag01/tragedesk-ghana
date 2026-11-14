@@ -23,7 +23,9 @@ const BOOKIE_CONFIG = {
   'Soccabet Ghana': { code: 'SC', bg: 'bg-purple-600', text: 'text-white' },
   'Soccabet': { code: 'SC', bg: 'bg-purple-600', text: 'text-white' },
   'Betway Ghana': { code: 'BW', bg: 'bg-red-600', text: 'text-white' },
-  'Betway': { code: 'BW', bg: 'bg-red-600', text: 'text-white' }
+  'Betway': { code: 'BW', bg: 'bg-red-600', text: 'text-white' },
+  'PremierBet Ghana': { code: 'PB', bg: 'bg-emerald-600', text: 'text-white' },
+  'PremierBet': { code: 'PB', bg: 'bg-emerald-600', text: 'text-white' }
 };
 
 function getBookieBadge(name) {

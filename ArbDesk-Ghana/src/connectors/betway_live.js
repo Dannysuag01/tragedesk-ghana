@@ -1,4 +1,5 @@
 import { BaseBookmaker } from './base.js';
+import { formatProxyUrl } from '../utils/proxy_helper.js';
 
 /**
  * Betway Ghana Connector
@@ -124,7 +125,7 @@ export class BetwayLiveConnector extends BaseBookmaker {
 
     for (const url of endpoints) {
       try {
-        const res = await fetch(url, {
+        const res = await fetch(formatProxyUrl(url), {
           headers: this.headers,
           signal: AbortSignal.timeout(2000)
         });

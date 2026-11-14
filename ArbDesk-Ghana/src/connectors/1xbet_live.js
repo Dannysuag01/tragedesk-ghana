@@ -1,4 +1,5 @@
 import { BaseBookmaker } from './base.js';
+import { formatProxyUrl } from '../utils/proxy_helper.js';
 
 /**
  * 1xBet Ghana Connector
@@ -59,7 +60,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
 
     for (const url of endpoints) {
       try {
-        const res = await fetch(url, {
+        const res = await fetch(formatProxyUrl(url), {
           headers: this.headers,
           signal: AbortSignal.timeout(2500)
         });
@@ -374,7 +375,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
     for (const gameId of idsToFetch) {
       try {
         const res = await fetch(
-          `${this.baseUrl}/LineFeed/GetGameZip?id=${gameId}&lng=en`,
+          formatProxyUrl(`${this.baseUrl}/LineFeed/GetGameZip?id=${gameId}&lng=en`),
           { headers: this.headers, signal: AbortSignal.timeout(2500) }
         );
 
