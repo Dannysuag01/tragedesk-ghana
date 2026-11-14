@@ -19,6 +19,6 @@ export const config = {
     enabled: true
   },
 
-  // 5-Second Adaptive Polling Rate
-  pollIntervalMs: 5000
+  // 3-Second Rapid Background Polling Rate for instant odds re-calculation
+  pollIntervalMs: 3000
 };

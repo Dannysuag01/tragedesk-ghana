@@ -47,23 +47,40 @@ async function runScan() {
     }
 
     const opps = await detector.findOpportunities(feeds, bookers);
-    currentOpportunities = opps;
+    const now = Date.now();
+    // Strictly filter for actionable profitable opportunities and stamp verification time
+    const verifiedOpps = [];
+    for (const arb of opps) {
+      if (arb && arb.isArb && arb.marginPct >= (config.minProfitMarginPct ?? 0.1) && arb.guaranteedProfit > 0) {
+        arb.verifiedAt = now;
+        if (!arb.discoveredAt) arb.discoveredAt = now;
+        verifiedOpps.push(arb);
+      }
+    }
+    currentOpportunities = verifiedOpps;
 
-    console.log(`[ArbDetector] Found ${opps.length} actionable arbitrage opportunities!`);
+    // Prune seenArbIds for opportunities that evaporated so if profitability returns, it re-alerts
+    const activeIds = new Set(verifiedOpps.map(o => o.id));
+    for (const [id] of seenArbIds.entries()) {
+      if (!activeIds.has(id)) {
+        seenArbIds.delete(id);
+      }
+    }
 
-    for (let i = 0; i < opps.length; i++) {
-      const arb = opps[i];
+    console.log(`[ArbDetector] Found ${verifiedOpps.length} actionable arbitrage opportunities!`);
+
+    for (let i = 0; i < verifiedOpps.length; i++) {
+      const arb = verifiedOpps[i];
       console.log(`--------------------------------------------------`);
       console.log(formatTelegramAlert(arb, i + 1));
 
       // Send to Telegram if enabled, margin >= minMarginPct, and not already notified
       const minMargin = config.telegram.minMarginPct ?? 1.0;
-      const now = Date.now();
-      // Clean up expired entries
+      // Clean up expired entries (older than 30 mins)
       for (const [id, ts] of seenArbIds.entries()) {
         if (now - ts > SEEN_TTL_MS) seenArbIds.delete(id);
       }
-      // Check if already seen within last 30 mins
+      // Check if already seen within active window
       if (config.telegram.enabled && arb.marginPct >= minMargin && !seenArbIds.has(arb.id)) {
         seenArbIds.set(arb.id, now);
         await sendTelegramMessage(
@@ -80,6 +97,11 @@ async function runScan() {
     lastScanAt = Date.now();
   } catch (err) {
     console.error('[Scanner] Scan cycle error:', err.message);
+    // Auto-prune stale opportunities on error (20s TTL)
+    const now = Date.now();
+    currentOpportunities = currentOpportunities.filter(o => 
+      o && o.isArb && o.marginPct > 0 && o.guaranteedProfit > 0 && (now - (o.verifiedAt || 0) <= 20000)
+    );
   } finally {
     isScanning = false;
   }

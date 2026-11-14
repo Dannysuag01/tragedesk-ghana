@@ -40,7 +40,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
       try {
         const res = await fetch(url, {
           headers: this.headers,
-          signal: AbortSignal.timeout(8000)
+          signal: AbortSignal.timeout(2500)
         });
         if (!res.ok) continue;
 
@@ -319,7 +319,7 @@ export class OneXBetLiveConnector extends BaseBookmaker {
       try {
         const res = await fetch(
           `${this.baseUrl}/service-api/LineFeed/GetGameZip?id=${gameId}&lng=en`,
-          { headers: this.headers, signal: AbortSignal.timeout(8000) }
+          { headers: this.headers, signal: AbortSignal.timeout(2500) }
         );
         if (!res.ok) continue;
 

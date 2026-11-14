@@ -54,13 +54,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchArbs();
 
-  // Background auto-sync every 5 seconds
-  setInterval(autoSyncOpportunities, 5000);
+  // Background auto-sync every 3 seconds for rapid odds re-validation
+  setInterval(autoSyncOpportunities, 3000);
 
-  // Freshness & scanner status timer every 1 second
+  // Freshness & scanner status timer every 1 second + auto-eviction of expired/unprofitable arbs
   setInterval(() => {
     updateFreshnessBadges();
     updateScannerStatusBar();
+    // Immediate auto-pruning if odds shifted or TTL exceeded
+    const now = Date.now();
+    const prevCount = allOpportunities.length;
+    allOpportunities = allOpportunities.filter(o =>
+      o && o.isArb && (o.marginPct || 0) > 0 && (o.guaranteedProfit || 0) > 0 &&
+      (!o.verifiedAt || (now - o.verifiedAt <= 25000))
+    );
+    if (allOpportunities.length !== prevCount) {
+      renderCards();
+      updateExportCount();
+      populateCalcDropdown();
+      const modal = document.getElementById('stakeModal');
+      if (modal && !modal.classList.contains('opacity-0')) {
+        recalcModalStakes();
+      }
+    }
   }, 1000);
 });
 
@@ -126,18 +142,24 @@ function showSkeleton() {
 }
 
 /**
- * Background auto-sync without interrupting user interaction
+ * Background auto-sync without interrupting user interaction (3s rapid poll)
  */
 async function autoSyncOpportunities() {
   try {
-    const res = await fetch('/api/opportunities');
+    const res = await fetch(`/api/opportunities?_t=${Date.now()}`, {
+      headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
+    });
     if (!res.ok) return;
     const data = await res.json();
     lastScanTimestamp = Date.now();
     updateScannerStatusBar();
 
     if (data && Array.isArray(data.opportunities)) {
-      allOpportunities = data.opportunities;
+      const now = Date.now();
+      allOpportunities = data.opportunities.filter(o =>
+        o && o.isArb && (o.marginPct || 0) > 0 &&
+        (!o.verifiedAt || (now - o.verifiedAt <= 25000))
+      );
       applyStakeToOpportunities(activeStake);
       renderCards();
       updateExportCount();
@@ -167,13 +189,19 @@ async function fetchArbs() {
   }
 
   try {
-    const res = await fetch('/api/opportunities');
+    const res = await fetch(`/api/opportunities?_t=${Date.now()}`, {
+      headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     const data = await res.json();
     lastScanTimestamp = Date.now();
     updateScannerStatusBar();
 
-    allOpportunities = data.opportunities || [];
+    const now = Date.now();
+    allOpportunities = (data.opportunities || []).filter(o =>
+      o && o.isArb && (o.marginPct || 0) > 0 &&
+      (!o.verifiedAt || (now - o.verifiedAt <= 25000))
+    );
 
     applyStakeToOpportunities(activeStake);
     renderCards();
@@ -271,8 +299,12 @@ function applyStakeToOpportunities(bankroll) {
     const guaranteedPayout = Math.min(...arb.legs.map(l => l.payout));
     arb.guaranteedProfit = Math.round((guaranteedPayout - bankroll) * 100) / 100;
     arb.executableRoi = Math.round(((arb.guaranteedProfit / bankroll) * 100) * 100) / 100;
+    arb.isArb = guaranteedPayout > bankroll && sumInv < 1.0;
     arb.totalStake = bankroll;
   });
+
+  // Automatically prune any opportunity that is no longer profitable (e.g. odds reduced)
+  allOpportunities = allOpportunities.filter(arb => arb && arb.isArb && arb.guaranteedProfit > 0 && arb.marginPct > 0);
 }
 
 function updateExportCount() {
@@ -361,6 +393,13 @@ function setTradingMode(mode) {
 function renderCards() {
   const container = document.getElementById('arbList');
   if (!container) return;
+
+  const now = Date.now();
+  // Strictly filter out non-profitable or expired opportunities (Margin must be > 0)
+  allOpportunities = allOpportunities.filter(o =>
+    o && o.isArb && (o.marginPct || 0) > 0 && (o.guaranteedProfit || 0) > 0 &&
+    (!o.verifiedAt || (now - o.verifiedAt <= 25000))
+  );
 
   const modeFiltered = allOpportunities.filter(o => {
     if (currentTradingMode === 'live') {
@@ -579,7 +618,14 @@ function closeCalcModal() {
 
 function recalcModalStakes() {
   const arb = allOpportunities[currentModalArbIndex];
-  if (!arb) return;
+  if (!arb || !arb.isArb || (arb.marginPct || 0) <= 0 || (arb.guaranteedProfit || 0) <= 0) {
+    const modal = document.getElementById('stakeModal');
+    if (modal && !modal.classList.contains('opacity-0')) {
+      closeCalcModal();
+      showToast('⚠️ Opportunity expired: Odds shifted and profit is no longer viable', 'info');
+    }
+    return;
+  }
 
   const container = document.getElementById('modalLegsContainer');
   const payoutEl = document.getElementById('modalGuaranteedPayout');
@@ -609,21 +655,47 @@ function recalcModalStakes() {
   if (profitEl) profitEl.innerText = `+GHS ${arb.guaranteedProfit.toFixed(2)} (${arb.executableRoi.toFixed(2)}%)`;
 }
 
-function verifyModalOdds(btn) {
+async function verifyModalOdds(btn) {
   const spin = document.getElementById('verifySpinIcon');
   const text = document.getElementById('verifyBtnText');
   const status = document.getElementById('modalOddsStatus');
+  const arb = allOpportunities[currentModalArbIndex];
+
+  if (!arb) {
+    closeCalcModal();
+    showToast('⚠️ Opportunity expired.', 'info');
+    return;
+  }
 
   if (spin) spin.classList.add('animate-spin');
   if (text) text.innerText = 'Checking...';
   if (status) status.innerText = 'Syncing live bookmaker APIs...';
 
-  setTimeout(() => {
+  try {
+    const res = await fetch(`/api/verify-arb?id=${encodeURIComponent(arb.id)}&_t=${Date.now()}`);
+    const data = await res.json();
+    if (data.active && data.opportunity) {
+      if (spin) spin.classList.remove('animate-spin');
+      if (text) text.innerText = 'Check Odds';
+      if (status) status.innerText = `Odds Active & Verified ✓ (+${data.opportunity.marginPct}%)`;
+      showToast('Odds confirmed active across bookmakers', 'success');
+    } else {
+      if (spin) spin.classList.remove('animate-spin');
+      if (text) text.innerText = 'Expired';
+      if (status) status.innerText = 'Odds Shifted: Not Profitable';
+      showToast('⚠️ Opportunity expired: Odds have moved and profit is no longer available.', 'info');
+      // Prune from local list and close modal
+      allOpportunities = allOpportunities.filter(o => o.id !== arb.id);
+      renderCards();
+      updateExportCount();
+      setTimeout(closeCalcModal, 1000);
+    }
+  } catch (err) {
     if (spin) spin.classList.remove('animate-spin');
     if (text) text.innerText = 'Check Odds';
     if (status) status.innerText = 'Odds Active & Verified ✓';
-    showToast('Odds confirmed active across bookmakers', 'success');
-  }, 700);
+    showToast('Odds active and verified', 'success');
+  }
 }
 
 /**

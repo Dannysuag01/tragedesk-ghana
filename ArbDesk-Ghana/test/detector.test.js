@@ -334,3 +334,94 @@ test('detects Home Team Total Goals arbitrage (Home Over/Under 1.5)', async () =
   assert.strictEqual(teamTotalArb.line, 'Home Total 1.5');
   assert(teamTotalArb.marginPct > 9.0);
 });
+
+test('strictly rejects non-profitable opportunities when odds drop (e.g. Betpawa drops from 1.35 to 1.22)', async () => {
+  const detector = new ArbDetector({ minMargin: 0.1, maxMargin: 25.0 });
+
+  // Scenario 1: Betpawa @ 1.35 vs Sportybet Away @ 4.90 -> PROFITABLE (+5.52%)
+  const profitableFeeds = [
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [{
+          id: '5064',
+          type: 'asian_handicap_+0.5',
+          name: 'Asian Handicap',
+          line: 'Handicap +0.5',
+          outcomes: [
+            { id: 'bp_1', name: 'Home (+0.5)', odds: 1.35 },
+            { id: 'bp_2', name: 'Away (-0.5)', odds: 3.80 }
+          ]
+        }]
+      }]
+    },
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [{
+          id: '1',
+          type: '1x2',
+          name: '1X2 (Full Time)',
+          outcomes: [
+            { id: 'sp_1', name: 'Home', odds: 1.70 },
+            { id: 'sp_x', name: 'Draw', odds: 3.50 },
+            { id: 'sp_2', name: 'Away', odds: 4.90 }
+          ]
+        }]
+      }]
+    }
+  ];
+
+  const profOpps = await detector.findOpportunities(profitableFeeds);
+  assert.strictEqual(profOpps.length, 1, 'Should detect profitable opportunity at 1.35');
+  assert(profOpps[0].marginPct > 5.0, 'Margin should be ~5.52%');
+
+  // Scenario 2: Betpawa drops to 1.22 vs Sportybet Away @ 4.90 -> NOT PROFITABLE (sumInv > 1.0)
+  const reducedOddsFeeds = [
+    {
+      bookmaker: 'Betpawa Ghana',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [{
+          id: '5064',
+          type: 'asian_handicap_+0.5',
+          name: 'Asian Handicap',
+          line: 'Handicap +0.5',
+          outcomes: [
+            { id: 'bp_1', name: 'Home (+0.5)', odds: 1.22 }, // DROPPED ODDS
+            { id: 'bp_2', name: 'Away (-0.5)', odds: 4.50 }
+          ]
+        }]
+      }]
+    },
+    {
+      bookmaker: 'Sportybet',
+      matches: [{
+        homeTeam: 'Kosovo',
+        awayTeam: 'Israel',
+        sport: 'Football',
+        markets: [{
+          id: '1',
+          type: '1x2',
+          name: '1X2 (Full Time)',
+          outcomes: [
+            { id: 'sp_1', name: 'Home', odds: 1.70 },
+            { id: 'sp_x', name: 'Draw', odds: 3.50 },
+            { id: 'sp_2', name: 'Away', odds: 4.90 }
+          ]
+        }]
+      }]
+    }
+  ];
+
+  const reducedOpps = await detector.findOpportunities(reducedOddsFeeds);
+  assert.strictEqual(reducedOpps.length, 0, 'Must NOT show or return opportunity when odds drop and profit is gone');
+});

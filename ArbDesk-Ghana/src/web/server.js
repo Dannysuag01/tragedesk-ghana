@@ -43,12 +43,46 @@ export function createTrageDeskServer(getOpportunitiesFn, port = 3000) {
     if (pathname === '/api/opportunities') {
       try {
         const opportunities = await getOpportunitiesFn();
+        const now = Date.now();
+        // Return only currently actionable and verified opportunities
+        const activeOpps = (opportunities || []).filter(o =>
+          o && o.isArb && (o.marginPct || 0) > 0 && (o.guaranteedProfit || 0) > 0 &&
+          (!o.verifiedAt || (now - o.verifiedAt <= 25000))
+        );
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Access-Control-Allow-Origin': '*'
         });
-        res.end(JSON.stringify({ status: 'ok', opportunities }));
+        res.end(JSON.stringify({ status: 'ok', opportunities: activeOpps, serverTime: now }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: err.message }));
+      }
+      return;
+    }
+
+    // API Endpoint: /api/verify-arb?id=... (Instant real-time verification)
+    if (pathname === '/api/verify-arb') {
+      try {
+        const parsedUrl = new URL(req.url, `http://${host}`);
+        const arbId = parsedUrl.searchParams.get('id');
+        const opportunities = await getOpportunitiesFn();
+        const now = Date.now();
+        const found = (opportunities || []).find(o => o.id === arbId);
+        const isValid = Boolean(
+          found &&
+          found.isArb &&
+          (found.marginPct || 0) > 0 &&
+          (found.guaranteedProfit || 0) > 0 &&
+          (!found.verifiedAt || (now - found.verifiedAt <= 25000))
+        );
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ status: 'ok', active: isValid, opportunity: isValid ? found : null, serverTime: now }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'error', message: err.message }));

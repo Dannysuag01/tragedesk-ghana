@@ -366,14 +366,15 @@ export class TrageDeskDetector {
       }
     }
 
-    // 2. Asian Handicap +0.5 vs 1X2
-    const ah05 = Object.values(markets).find(m => m.type === 'asian_handicap_+0.5' || m.type === 'asian_handicap_0.5');
-    if (ah05 && m1x2) {
-      const ahHomePlus = ah05.outcomes.find(o => o.name?.toLowerCase().includes('home'));
-      const ahAwayPlus = ah05.outcomes.find(o => o.name?.toLowerCase().includes('away'));
+    // 2. Asian Handicap +0.5 vs 1X2 (Strict hedge: team with +0.5 covers win + draw, opposing team wins)
+    const ahPlus05 = Object.values(markets).find(m => m.type === 'asian_handicap_+0.5' || m.type === 'asian_handicap_0.5');
+    const ahMinus05 = Object.values(markets).find(m => m.type === 'asian_handicap_-0.5');
+    if (m1x2) {
       const home1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'home');
       const away1x2 = m1x2.outcomes.find(o => o.name?.toLowerCase() === 'away');
 
+      // Home (+0.5) covers Home Win + Draw -> strictly hedges against Away Win
+      const ahHomePlus = ahPlus05?.outcomes.find(o => o.name?.toLowerCase().includes('home') && !o.name.includes('-'));
       if (ahHomePlus?.quotes?.length > 0 && away1x2?.quotes?.length > 0) {
         markets['synth_ah_home_away'] = {
           marketName: 'Asian Handicap +0.5 vs Away Win (Hedge)',
@@ -385,6 +386,10 @@ export class TrageDeskDetector {
           ]
         };
       }
+
+      // Away (+0.5) covers Away Win + Draw -> strictly hedges against Home Win
+      const ahAwayPlus = ahMinus05?.outcomes.find(o => o.name?.toLowerCase().includes('away') && !o.name.includes('-')) ||
+                         ahPlus05?.outcomes.find(o => o.name?.toLowerCase().includes('away') && o.name.includes('+'));
       if (ahAwayPlus?.quotes?.length > 0 && home1x2?.quotes?.length > 0) {
         markets['synth_ah_away_home'] = {
           marketName: 'Asian Handicap +0.5 vs Home Win (Hedge)',

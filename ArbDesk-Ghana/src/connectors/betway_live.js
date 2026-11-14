@@ -112,7 +112,7 @@ export class BetwayLiveConnector extends BaseBookmaker {
       try {
         const res = await fetch(url, {
           headers: this.headers,
-          signal: AbortSignal.timeout(8000)
+          signal: AbortSignal.timeout(2000)
         });
 
         // Skip Cloudflare / auth-wall responses
