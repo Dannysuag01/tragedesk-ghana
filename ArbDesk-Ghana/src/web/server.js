@@ -23,14 +23,22 @@ const MIME_TYPES = {
 
 export function createArbServer(getOpportunitiesFn, port = 3000) {
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    const host = req.headers.host || 'localhost';
+    let pathname = '/';
+    try {
+      const parsedUrl = new URL(req.url, `http://${host}`);
+      pathname = parsedUrl.pathname;
+    } catch {
+      pathname = req.url.split('?')[0] || '/';
+    }
 
     // API Endpoint: /api/opportunities
-    if (url.pathname === '/api/opportunities') {
+    if (pathname === '/api/opportunities') {
       try {
         const opportunities = await getOpportunitiesFn();
         res.writeHead(200, {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Access-Control-Allow-Origin': '*'
         });
         res.end(JSON.stringify({ status: 'ok', opportunities }));
@@ -42,7 +50,7 @@ export function createArbServer(getOpportunitiesFn, port = 3000) {
     }
 
     // Static File Serving
-    let filePath = path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname);
+    let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -65,8 +73,8 @@ export function createArbServer(getOpportunitiesFn, port = 3000) {
   return {
     start: () => {
       return new Promise((resolve) => {
-        server.listen(port, () => {
-          console.log(`[ArbDesk] Dashboard running at http://localhost:${port}`);
+        server.listen(port, '0.0.0.0', () => {
+          console.log(`[ArbDesk] Dashboard running at http://0.0.0.0:${port}`);
           resolve(server);
         });
       });

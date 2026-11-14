@@ -19,6 +19,7 @@ export class ArbDetector {
     this.minMargin = options.minMargin ?? 0.1; // Strictly positive arbitrage profit only (> 0%)
     this.maxMargin = options.maxMargin ?? 25.0; // margins > 25% are usually palps/mistakes that bookies cancel
     this.defaultBankroll = options.defaultBankroll ?? 100;
+    this.enableBookingCodes = options.enableBookingCodes ?? false; // User requested "no need for the booking code"
   }
 
   /**
@@ -179,6 +180,7 @@ export class ArbDetector {
    * Attaches booking codes to legs
    */
   async _attachBookingCodes(legs, bookers, matchMeta = {}, marketData = {}) {
+    if (!this.enableBookingCodes) return;
     for (const leg of legs) {
       const booker = bookers[leg.bookmaker];
       if (booker && typeof booker.generateBookingCode === 'function') {

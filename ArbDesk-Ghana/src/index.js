@@ -21,54 +21,61 @@ const detector = new ArbDetector({
 
 let currentOpportunities = [];
 const seenArbIds = new Set();
+let isScanning = false;
 
 /**
  * Executes a scan cycle across Ghana sportsbooks
  */
 async function runScan() {
-  console.log(`\n[${new Date().toLocaleTimeString()}] 🔍 Scanning Ghanaian bookmakers for arbitrage...`);
+  if (isScanning) {
+    console.log('[Scanner] Scan cycle already in progress, skipping overlapping run...');
+    return;
+  }
+  isScanning = true;
 
-  // Pulls real-time feeds across SportyBet, Betpawa, 1xBet, Soccabet, and Betway
-  const feeds = await liveManager.getLatestFeeds();
+  try {
+    console.log(`\n[${new Date().toLocaleTimeString()}] 🔍 Scanning Ghanaian bookmakers for arbitrage...`);
 
-  const opps = await detector.findOpportunities(feeds, bookers);
-  currentOpportunities = opps;
+    // Pulls real-time feeds across SportyBet, Betpawa, 1xBet, Soccabet, and Betway
+    const feeds = await liveManager.getLatestFeeds();
 
-  console.log(`[ArbDetector] Found ${opps.length} actionable arbitrage opportunities!`);
+    const opps = await detector.findOpportunities(feeds, bookers);
+    currentOpportunities = opps;
 
-  for (let i = 0; i < opps.length; i++) {
-    const arb = opps[i];
-    console.log(`--------------------------------------------------`);
-    console.log(formatTelegramAlert(arb, i + 1));
+    console.log(`[ArbDetector] Found ${opps.length} actionable arbitrage opportunities!`);
 
-    // Send to Telegram if enabled, margin >= minMarginPct, and not already notified
-    const minMargin = config.telegram.minMarginPct ?? 1.0;
-    if (config.telegram.enabled && arb.marginPct >= minMargin && !seenArbIds.has(arb.id)) {
-      seenArbIds.add(arb.id);
-      await sendTelegramMessage(
-        config.telegram.botToken,
-        config.telegram.chatId,
-        formatTelegramAlert(arb, i + 1)
-      );
+    for (let i = 0; i < opps.length; i++) {
+      const arb = opps[i];
+      console.log(`--------------------------------------------------`);
+      console.log(formatTelegramAlert(arb, i + 1));
+
+      // Send to Telegram if enabled, margin >= minMarginPct, and not already notified
+      const minMargin = config.telegram.minMarginPct ?? 1.0;
+      if (config.telegram.enabled && arb.marginPct >= minMargin && !seenArbIds.has(arb.id)) {
+        seenArbIds.add(arb.id);
+        await sendTelegramMessage(
+          config.telegram.botToken,
+          config.telegram.chatId,
+          formatTelegramAlert(arb, i + 1)
+        );
+      }
     }
-  }
 
-  // Prevent memory leak over prolonged 24/7 uptime
-  if (seenArbIds.size > 500) {
-    seenArbIds.clear();
+    // Prevent memory leak over prolonged 24/7 uptime
+    if (seenArbIds.size > 500) {
+      seenArbIds.clear();
+    }
+    console.log(`--------------------------------------------------`);
+  } catch (err) {
+    console.error('[Scanner] Scan cycle error:', err.message);
+  } finally {
+    isScanning = false;
   }
-  console.log(`--------------------------------------------------`);
 }
 
-// Start Web Dashboard
+// 1. Start Web Dashboard immediately so host health checks pass instantly on boot
 const server = createArbServer(() => currentOpportunities, config.port);
 await server.start();
-
-// Run immediate first scan
-await runScan();
-
-// Set up periodic scanning
-setInterval(runScan, config.pollIntervalMs);
 
 console.log(`
 =====================================================
@@ -78,4 +85,18 @@ console.log(`
 💰 Default Bankroll: GHS ${config.defaultBankroll}
 =====================================================
 `);
+
+// 2. Continuous non-overlapping background scanner loop
+async function startScanLoop() {
+  while (true) {
+    try {
+      await runScan();
+    } catch (err) {
+      console.error('[Scanner] Unexpected error in scan loop:', err.message);
+    }
+    await new Promise(resolve => setTimeout(resolve, config.pollIntervalMs || 8000));
+  }
+}
+
+startScanLoop();
 

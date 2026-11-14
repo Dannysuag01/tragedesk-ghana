@@ -141,14 +141,16 @@ function updateChipStyling(prefix, activeVal) {
 }
 
 function applyStakeToOpportunities(bankroll) {
+  if (!Array.isArray(allOpportunities)) return;
   allOpportunities.forEach(arb => {
-    const sumInv = arb.legs.reduce((acc, l) => acc + (1 / l.odds), 0);
+    if (!arb || !Array.isArray(arb.legs) || arb.legs.length === 0) return;
+    const sumInv = arb.legs.reduce((acc, l) => acc + (1 / (l.odds || 1)), 0);
     let allocated = 0;
     arb.legs.forEach((leg, i) => {
       if (i === arb.legs.length - 1) {
         leg.stake = Math.round((bankroll - allocated) * 100) / 100;
       } else {
-        leg.stake = Math.round((bankroll * ((1 / leg.odds) / sumInv)) * 100) / 100;
+        leg.stake = Math.round((bankroll * ((1 / (leg.odds || 1)) / sumInv)) * 100) / 100;
         allocated += leg.stake;
       }
       leg.payout = Math.floor(leg.stake * leg.odds * 100) / 100;
@@ -250,7 +252,7 @@ function renderCards() {
 
   const sportFiltered = currentSport === 'All' 
     ? modeFiltered 
-    : modeFiltered.filter(o => o.category.toLowerCase() === currentSport.toLowerCase());
+    : modeFiltered.filter(o => (o.category || 'Football').toLowerCase() === currentSport.toLowerCase());
 
   const filtered = sportFiltered.filter(o => {
     if (currentMarketFilter === 'All') return true;
@@ -291,11 +293,13 @@ function renderCards() {
 
   container.innerHTML = filtered.map((arb, index) => {
     const isLive = Boolean(arb.isLive);
+    const globalIdx = allOpportunities.indexOf(arb);
+    const targetIdx = globalIdx >= 0 ? globalIdx : index;
 
     return `
       <div class="bg-[#151D2F] border ${isLive ? 'border-amber-500/60 ring-1 ring-amber-500/30' : 'border-gray-800/90'} rounded-2xl p-4 shadow-xl transition-all duration-150 hover:border-gray-700">
         <!-- Event Header (Clickable to open calculator) -->
-        <div onclick="openCalcModal(${index})" class="flex items-start justify-between pb-3 border-b border-gray-800/80 cursor-pointer group">
+        <div onclick="openCalcModal(${targetIdx})" class="flex items-start justify-between pb-3 border-b border-gray-800/80 cursor-pointer group">
           <div class="space-y-1">
             <div class="flex items-center space-x-2">
               <span class="w-6 h-6 rounded-md ${isLive ? 'bg-amber-600' : 'bg-emerald-600'} text-white font-black text-xs flex items-center justify-center shadow-sm">
@@ -411,32 +415,13 @@ function renderCards() {
         <!-- Action Row -->
         <div class="mt-3.5 pt-3 border-t border-gray-800/80 flex items-center justify-between gap-2">
           <!-- Direct Calculate Modal Button -->
-          <button onclick="openCalcModal(${index})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/30 transition-all duration-150 cursor-pointer flex items-center space-x-1.5">
+          <button onclick="openCalcModal(${targetIdx})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/30 transition-all duration-150 cursor-pointer flex items-center space-x-1.5">
             <i class="fa-solid fa-calculator text-xs"></i>
             <span>Calculate Stake</span>
           </button>
 
           <!-- Copy Tip Button -->
-          <button onclick="event.stopPropagation(); copySingleTip(${index}, this)" class="px-3.5 py-2 bg-gray-800/90 hover:bg-gray-700 active:scale-95 border border-gray-700/80 hover:border-gray-600 rounded-xl text-xs font-bold text-gray-200 hover:text-white flex items-center space-x-1.5 transition-all duration-150 cursor-pointer shadow-sm">
-            <i class="fa-regular fa-copy text-xs"></i>
-            <span>Copy Tip</span>
-          </button>
-        </div>
-
-      </div>
-    `;
-  }).join('');
-
-        <!-- Action Row -->
-        <div class="mt-3.5 pt-3 border-t border-gray-800/80 flex items-center justify-between gap-2">
-          <!-- Direct Calculate Modal Button -->
-          <button onclick="openCalcModal(${index})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/30 transition-all duration-150 cursor-pointer flex items-center space-x-1.5">
-            <i class="fa-solid fa-calculator text-xs"></i>
-            <span>Calculate Stake</span>
-          </button>
-
-          <!-- Copy Tip Button -->
-          <button onclick="event.stopPropagation(); copySingleTip(${index}, this)" class="px-3.5 py-2 bg-gray-800/90 hover:bg-gray-700 active:scale-95 border border-gray-700/80 hover:border-gray-600 rounded-xl text-xs font-bold text-gray-200 hover:text-white flex items-center space-x-1.5 transition-all duration-150 cursor-pointer shadow-sm">
+          <button onclick="event.stopPropagation(); copySingleTip(${targetIdx}, this)" class="px-3.5 py-2 bg-gray-800/90 hover:bg-gray-700 active:scale-95 border border-gray-700/80 hover:border-gray-600 rounded-xl text-xs font-bold text-gray-200 hover:text-white flex items-center space-x-1.5 transition-all duration-150 cursor-pointer shadow-sm">
             <i class="fa-regular fa-copy text-xs"></i>
             <span>Copy Tip</span>
           </button>
