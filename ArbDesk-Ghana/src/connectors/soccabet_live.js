@@ -88,7 +88,7 @@ export class SoccabetLiveConnector extends BaseBookmaker {
 
   /**
    * Fetches real upcoming pre-match fixtures from Soccabet.
-   * Tries multiple endpoints; first successful, non-empty response wins.
+   * Primary source is Soccabet's live initial state data (`/api/sports/isd.js`).
    * Returns [] without throwing if all endpoints fail.
    * Enters 5-minute cooldown after 3 consecutive total failures.
    * @returns {Promise<Array<Object>>}
@@ -99,6 +99,87 @@ export class SoccabetLiveConnector extends BaseBookmaker {
       return [];
     }
 
+    // 1. Primary High-Reliability Feed: Soccabet ISD
+    try {
+      const isdUrl = `https://www.soccabet.com/api/sports/isd.js?t=${Date.now()}`;
+      const res = await fetch(formatProxyUrl(isdUrl), {
+        headers: this.headers,
+        signal: AbortSignal.timeout(4000)
+      });
+
+      if (res.ok) {
+        const text = await res.text();
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
+        if (start !== -1 && end !== -1) {
+          const jsonArr = JSON.parse(text.slice(start, end + 1));
+          const sports = new Map(jsonArr.filter(x => x.object === 'sport').map(s => [s.id, s.name]));
+          const categories = new Map(jsonArr.filter(x => x.object === 'category').map(c => [c.id, { name: c.name, sportId: c.sportId }]));
+          const tournaments = new Map(jsonArr.filter(x => x.object === 'tournament').map(t => [t.id, { name: t.name, categoryId: t.categoryId }]));
+          const markets = jsonArr.filter(x => x.object === 'market');
+          const matches = jsonArr.filter(x => x.object === 'match');
+
+          const parsed = [];
+          for (const m of matches) {
+            if (!m.competitors || m.competitors.length < 2) continue;
+            const homeTeam = m.competitors[0];
+            const awayTeam = m.competitors[1];
+            const tourneyInfo = tournaments.get(m.tournamentId);
+            const catInfo = tourneyInfo ? categories.get(tourneyInfo.categoryId) : null;
+            const sportName = catInfo ? sports.get(catInfo.sportId) : 'Football';
+            const compName = tourneyInfo ? `${catInfo?.name ? catInfo.name + ' - ' : ''}${tourneyInfo.name}` : 'Football';
+
+            const mMarkets = [];
+            const matchMkts = markets.filter(mk => mk.matchId === m.id);
+            for (const mk of matchMkts) {
+              const s1 = mk.selections?.find(s => s.outcome === '1');
+              const sx = mk.selections?.find(s => s.outcome === 'X');
+              const s2 = mk.selections?.find(s => s.outcome === '2');
+
+              if (s1 && s2 && s1.odds > 1 && s2.odds > 1) {
+                mMarkets.push({
+                  id: String(mk.id),
+                  type: '1x2',
+                  name: '1X2 (Full Time)',
+                  line: 'Full Time',
+                  outcomes: [
+                    { id: String(s1.id), name: 'Home', odds: parseFloat(s1.odds) },
+                    ...(sx ? [{ id: String(sx.id), name: 'Draw', odds: parseFloat(sx.odds) }] : []),
+                    { id: String(s2.id), name: 'Away', odds: parseFloat(s2.odds) }
+                  ]
+                });
+              }
+            }
+
+            if (mMarkets.length > 0) {
+              parsed.push({
+                id: String(m.id),
+                homeTeam,
+                awayTeam,
+                sport: sportName || 'Football',
+                competition: compName,
+                country: catInfo?.name || 'International',
+                startTime: new Date(m.startTs * 1000).toISOString(),
+                dateStr: new Date(m.startTs * 1000).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+                isLive: Boolean(m.isLive),
+                code: m.code || null,
+                markets: mMarkets
+              });
+            }
+          }
+
+          if (parsed.length > 0) {
+            console.log(`[Soccabet] Fetched ${parsed.length} live matches from Soccabet ISD`);
+            this._consecutiveFailures = 0;
+            return parsed;
+          }
+        }
+      }
+    } catch (err) {
+      // Fall through to secondary endpoints
+    }
+
+    // 2. Secondary fallback endpoints
     const endpoints = [
       'https://www.soccabet.com/api/v1/sportsbook/fixtures?sportId=1&take=50',
       'https://www.soccabet.com/api/v2/fixtures?sport=soccer&limit=50',
@@ -170,6 +251,12 @@ export class SoccabetLiveConnector extends BaseBookmaker {
    * Generates direct betslip share URL for Soccabet Ghana.
    */
   async generateBookingCode(selection = {}) {
+    if (selection.code) {
+      return {
+        code: String(selection.code),
+        shareUrl: 'https://www.soccabet.com/'
+      };
+    }
     const query = selection.homeTeam || selection.selection || 'soccer';
     const shareUrl = `${this.baseUrl}/sports/search?q=${encodeURIComponent(query)}`;
     return {

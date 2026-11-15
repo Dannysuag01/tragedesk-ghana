@@ -15,7 +15,7 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '9246294974:AAH7ccqkW9TcojYdL3xglta-DIRFHpX6EVA',
     chatId: process.env.TELEGRAM_CHAT_ID || '8798424158',
-    minMarginPct: parseFloat(process.env.TELEGRAM_MIN_MARGIN || '1.0'), // Only alert on >= 1.0% margin to prevent clutter
+    minMarginPct: parseFloat(process.env.TELEGRAM_MIN_MARGIN || '0.2'), // Alert on >= 0.2% margin so actionable arbs are never missed
     enabled: true
   },
 

@@ -561,6 +561,17 @@ export class LiveFeedManager {
         }
       }
     }
+
+    // 2b. Independent Betpawa Discovery Pass (Discovers matches Betpawa offers even if not on Sportybet)
+    try {
+      const existingBpIds = new Set(betpawaMatches.map(m => String(m.id)));
+      const independentBp = await this._fetchIndependentBetpawaMatches(bpHeaders, existingBpIds);
+      if (independentBp.length > 0) {
+        betpawaMatches.push(...independentBp);
+      }
+    } catch (e) {
+      // Non-critical, continue
+    }
   } catch(err) {
     console.warn('[LiveFeedManager] SportyBet fetch error:', err.message);
   }
@@ -792,6 +803,100 @@ export class LiveFeedManager {
         });
         if (bpEvRes.ok) {
           const bpFull = await bpEvRes.json();
+          return this._parseBetpawaFullJson(
+            bpFull,
+            bpEv,
+            ev.homeTeamName,
+            ev.awayTeamName,
+            evSport,
+            spComp,
+            spCountry,
+            ev.estimateStartTime
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[LiveFeedManager] Betpawa matching error:', e.message);
+  }
+
+  return null;
+}
+
+  /**
+   * Discovers and parses independent Betpawa events (e.g. Nigerian league, European matches)
+   * even if Sportybet does not carry them in its top events.
+   */
+  async _fetchIndependentBetpawaMatches(bpHeaders, existingIds = new Set()) {
+    const discovered = [];
+    const keywords = ['fc', 'united', 'city', 'real', 'nigeria', 'ghana', 'league', 'athletic', 'club', 'sporting'];
+    try {
+      const results = await Promise.allSettled(
+        keywords.map(kw =>
+          fetch(`https://www.betpawa.com.gh/api/sportsbook/v3/search?name=${encodeURIComponent(kw)}`, {
+            headers: bpHeaders,
+            signal: AbortSignal.timeout(3500)
+          }).then(r => r.ok ? r.json() : { events: [] })
+        )
+      );
+
+      const uniqueEvents = new Map();
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value?.events) {
+          for (const ev of r.value.events) {
+            const eid = String(ev.id);
+            if (!existingIds.has(eid) && !uniqueEvents.has(eid)) {
+              uniqueEvents.set(eid, ev);
+            }
+          }
+        }
+      }
+
+      // Fetch details for up to 30 new independent Betpawa events in parallel chunks
+      const evList = Array.from(uniqueEvents.values()).slice(0, 30);
+      const CHUNK = 10;
+      for (let i = 0; i < evList.length; i += CHUNK) {
+        const batch = evList.slice(i, i + CHUNK);
+        const settled = await Promise.allSettled(
+          batch.map(async ev => {
+            const res = await fetch(`https://www.betpawa.com.gh/api/sportsbook/v4/events/${ev.id}`, {
+              headers: bpHeaders,
+              signal: AbortSignal.timeout(3500)
+            });
+            if (!res.ok) return null;
+            const fullJson = await res.json();
+            const home = ev.participants?.[0]?.name || ev.name?.split(' - ')?.[0] || 'Home';
+            const away = ev.participants?.[1]?.name || ev.name?.split(' - ')?.[1] || 'Away';
+            return this._parseBetpawaFullJson(
+              fullJson,
+              ev,
+              home,
+              away,
+              ev.category?.name || 'Football',
+              fullJson.competition?.name || ev.competition?.name || 'Football',
+              ev.region?.name || 'International',
+              fullJson.startTime || ev.startTime
+            );
+          })
+        );
+        for (const s of settled) {
+          if (s.status === 'fulfilled' && s.value) {
+            discovered.push(s.value);
+            existingIds.add(String(s.value.id));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[LiveFeedManager] Betpawa independent discovery warning:', e.message);
+    }
+    return discovered;
+  }
+
+  /**
+   * Reusable Betpawa Full Event JSON parser
+   */
+  _parseBetpawaFullJson(bpFull, bpEv, fallbackHome, fallbackAway, fallbackSport, fallbackComp, fallbackCountry, fallbackTime) {
+    if (!bpFull || !bpFull.markets) return null;
           const bpMarkets = [];
 
           // A. Betpawa 1X2 Full Time
@@ -1354,33 +1459,29 @@ export class LiveFeedManager {
             }
           }
 
-          if (bpMarkets.length > 0) {
-            const realBpHome = bpEv.verifiedHome || bpEv.participants?.[0]?.name || ev.homeTeamName;
-            const realBpAway = bpEv.verifiedAway || bpEv.participants?.[1]?.name || ev.awayTeamName;
-            const realBpComp = bpFull.competition?.name || bpEv.competition?.name || spComp;
 
-            return {
-              id: bpFull.id || bpEvId,
-              homeTeam: realBpHome,
-              awayTeam: realBpAway,
-              sport: bpEv.category?.name || evSport,
-              competition: realBpComp,
-              country: bpEv.region?.name || spCountry,
-              startTime: bpFull.startTime || new Date(ev.estimateStartTime).toISOString(),
-              dateStr: new Date(ev.estimateStartTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-              isLive: false,
-              markets: bpMarkets
-            };
-          }
-        }
-      }
+    if (bpMarkets.length > 0) {
+      const realBpHome = bpEv?.verifiedHome || bpEv?.participants?.[0]?.name || fallbackHome;
+      const realBpAway = bpEv?.verifiedAway || bpEv?.participants?.[1]?.name || fallbackAway;
+      const realBpComp = bpFull.competition?.name || bpEv?.competition?.name || fallbackComp;
+      const matchTime = bpFull.startTime || fallbackTime || new Date().toISOString();
+
+      return {
+        id: bpFull.id || bpEv?.id || `${realBpHome}_${realBpAway}`,
+        homeTeam: realBpHome,
+        awayTeam: realBpAway,
+        sport: bpEv?.category?.name || fallbackSport || 'Football',
+        competition: realBpComp,
+        country: bpEv?.region?.name || fallbackCountry || 'International',
+        startTime: matchTime,
+        dateStr: new Date(matchTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+        isLive: false,
+        markets: bpMarkets
+      };
     }
-  } catch (e) {
-    console.warn('[LiveFeedManager] Betpawa matching error:', e.message);
-  }
 
-  return null;
-}
+    return null;
+  }
 
 getBookers() {
   return this.connectors;
