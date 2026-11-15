@@ -43,7 +43,7 @@ async function runScan() {
     const feeds = await liveManager.getLatestFeeds();
 
     for (const feed of feeds) {
-      console.log(`  [${feed.bookmaker}] ${feed.matches.length} matches loaded`);
+      console.log(`  [${feed.bookmaker}] ${feed.matches.length} pre-match fixtures loaded`);
     }
 
     const opps = await detector.findOpportunities(feeds, bookers);

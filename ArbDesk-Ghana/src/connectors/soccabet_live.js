@@ -122,6 +122,10 @@ export class SoccabetLiveConnector extends BaseBookmaker {
           const parsed = [];
           for (const m of matches) {
             if (!m.competitors || m.competitors.length < 2) continue;
+            // Strictly Pre-Match only: ignore in-play / live matches or past fixtures
+            if (m.isLive) continue;
+            if (m.startTs && m.startTs * 1000 <= Date.now()) continue;
+
             const homeTeam = m.competitors[0];
             const awayTeam = m.competitors[1];
             const tourneyInfo = tournaments.get(m.tournamentId);
@@ -136,6 +140,7 @@ export class SoccabetLiveConnector extends BaseBookmaker {
               const sx = mk.selections?.find(s => s.outcome === 'X');
               const s2 = mk.selections?.find(s => s.outcome === '2');
 
+              // 1. 1X2 Full Time
               if (s1 && s2 && s1.odds > 1 && s2.odds > 1) {
                 mMarkets.push({
                   id: String(mk.id),
@@ -146,6 +151,57 @@ export class SoccabetLiveConnector extends BaseBookmaker {
                     { id: String(s1.id), name: 'Home', odds: parseFloat(s1.odds) },
                     ...(sx ? [{ id: String(sx.id), name: 'Draw', odds: parseFloat(sx.odds) }] : []),
                     { id: String(s2.id), name: 'Away', odds: parseFloat(s2.odds) }
+                  ]
+                });
+              }
+
+              // 2. Double Chance
+              const s1x = mk.selections?.find(s => s.outcome === '1X' || s.outcome === '1/X' || s.name === '1X');
+              const sx2 = mk.selections?.find(s => s.outcome === 'X2' || s.outcome === 'X/2' || s.name === 'X2');
+              const s12 = mk.selections?.find(s => s.outcome === '12' || s.outcome === '1/2' || s.name === '12');
+              if (s1x && sx2 && s1x.odds > 1 && sx2.odds > 1) {
+                mMarkets.push({
+                  id: String(mk.id),
+                  type: 'double_chance',
+                  name: 'Double Chance',
+                  line: 'Full Time',
+                  outcomes: [
+                    { id: String(s1x.id), name: '1X', odds: parseFloat(s1x.odds) },
+                    ...(s12 ? [{ id: String(s12.id), name: '12', odds: parseFloat(s12.odds) }] : []),
+                    { id: String(sx2.id), name: 'X2', odds: parseFloat(sx2.odds) }
+                  ]
+                });
+              }
+
+              // 3. Over / Under Totals
+              const sOver = mk.selections?.find(s => s.outcome === 'Over' || s.outcome?.toLowerCase() === 'over' || s.name?.toLowerCase()?.startsWith('over'));
+              const sUnder = mk.selections?.find(s => s.outcome === 'Under' || s.outcome?.toLowerCase() === 'under' || s.name?.toLowerCase()?.startsWith('under'));
+              if (sOver && sUnder && sOver.odds > 1 && sUnder.odds > 1) {
+                const line = mk.param || mk.line || mk.handicap || 2.5;
+                mMarkets.push({
+                  id: String(mk.id),
+                  type: `over_under_${line}`,
+                  name: 'Over/Under Goals',
+                  line: `Total ${line}`,
+                  outcomes: [
+                    { id: String(sOver.id), name: `Over ${line}`, odds: parseFloat(sOver.odds) },
+                    { id: String(sUnder.id), name: `Under ${line}`, odds: parseFloat(sUnder.odds) }
+                  ]
+                });
+              }
+
+              // 4. Both Teams to Score (BTTS)
+              const bttsYes = mk.selections?.find(s => s.outcome === 'Yes' || s.outcome === 'GG');
+              const bttsNo = mk.selections?.find(s => s.outcome === 'No' || s.outcome === 'NG');
+              if (bttsYes && bttsNo && bttsYes.odds > 1 && bttsNo.odds > 1) {
+                mMarkets.push({
+                  id: String(mk.id),
+                  type: 'btts',
+                  name: 'Both Teams to Score',
+                  line: 'Full Time',
+                  outcomes: [
+                    { id: String(bttsYes.id), name: 'Yes', odds: parseFloat(bttsYes.odds) },
+                    { id: String(bttsNo.id), name: 'No', odds: parseFloat(bttsNo.odds) }
                   ]
                 });
               }
@@ -169,7 +225,7 @@ export class SoccabetLiveConnector extends BaseBookmaker {
           }
 
           if (parsed.length > 0) {
-            console.log(`[Soccabet] Fetched ${parsed.length} live matches from Soccabet ISD`);
+            console.log(`[Soccabet] Fetched ${parsed.length} pre-match fixtures from Soccabet ISD`);
             this._consecutiveFailures = 0;
             return parsed;
           }

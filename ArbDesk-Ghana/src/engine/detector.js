@@ -222,15 +222,16 @@ export class TrageDeskDetector {
       const bookmakerName = feed.bookmaker;
 
       for (const match of feed.matches) {
-        const isLive = Boolean(match.isLive);
-        if (!isLive && match.startTime) {
+        // Strictly Pre-Match only: Filter out any in-play, live, or already started matches
+        if (match.isLive) continue;
+        if (match.startTime) {
           const matchTime = new Date(match.startTime).getTime();
-          if (!isNaN(matchTime) && matchTime < Date.now() - 10 * 60 * 1000) {
+          if (!isNaN(matchTime) && matchTime <= Date.now()) {
             continue;
           }
         }
 
-        let matchedGroup = groups.find(g => isMatchEqual(g.meta, match) && Boolean(g.meta.isLive) === isLive);
+        let matchedGroup = groups.find(g => isMatchEqual(g.meta, match));
 
         if (!matchedGroup) {
           matchedGroup = {
@@ -242,8 +243,8 @@ export class TrageDeskDetector {
               competition: match.competition,
               country: match.country || null,
               sport: match.sport || 'Football',
-              isLive,
-              preMatch: !isLive,
+              isLive: false,
+              preMatch: true,
               liveClock: match.liveClock || null,
               score: match.score || null
             },

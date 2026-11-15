@@ -33,22 +33,46 @@ export class OddsApiLiveConnector {
       '1xBet Ghana': [],
       'Betway Ghana': []
     };
+    const seenEventIds = {
+      '1xBet Ghana': new Set(),
+      'Betway Ghana': new Set()
+    };
 
-    // 'upcoming' sport key fetches top upcoming matches across all sports in a single API call
-    const sports = ['upcoming'];
+    // Worldwide coverage: All in-season sports, global cups & domestic leagues everywhere
+    const sports = [
+      'upcoming', // All sports, leagues, and tournaments worldwide
+      'soccer_epl',
+      'soccer_spain_la_liga',
+      'soccer_italy_serie_a',
+      'soccer_germany_bundesliga',
+      'soccer_france_ligue_one',
+      'soccer_uefa_champs_league',
+      'soccer_uefa_europa_league',
+      'soccer_uefa_europa_conference_league',
+      'soccer_england_championship',
+      'soccer_brazil_campeonato',
+      'soccer_argentina_primera_division',
+      'soccer_netherlands_eredivisie',
+      'soccer_portugal_primeira_liga',
+      'soccer_turkey_super_league',
+      'soccer_belgium_first_div',
+      'soccer_usa_mls',
+      'soccer_africa_cup_of_nations',
+      'basketball_nba',
+      'basketball_euroleague'
+    ];
 
     for (const sportKey of sports) {
       try {
         const url = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${this.apiKey}&regions=eu,uk&markets=h2h,totals,spreads&bookmakers=onexbet,betway`;
         const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
         if (!res.ok) {
-          console.warn(`[OddsAPI] Endpoint responded with status ${res.status}`);
           continue;
         }
 
         const remaining = res.headers.get('x-requests-remaining');
         const used = res.headers.get('x-requests-used');
-        if (remaining !== null) {
+        if (remaining !== null && sportKey === 'upcoming') {
           console.log(`[OddsAPI] Quota: ${used} used, ${remaining} remaining this month.`);
         }
 
@@ -59,6 +83,12 @@ export class OddsApiLiveConnector {
           const homeTeam = ev.home_team;
           const awayTeam = ev.away_team;
           const startTime = ev.commence_time;
+
+          // Strictly Pre-Match only: filter out fixtures that have already started
+          if (startTime && new Date(startTime).getTime() <= Date.now()) {
+            continue;
+          }
+
           const sportKeyStr = (ev.sport_key || sportKey || '').toLowerCase();
           const sport = sportKeyStr.includes('basketball') ? 'Basketball' :
                         sportKeyStr.includes('tennis') ? 'Tennis' :
@@ -69,6 +99,9 @@ export class OddsApiLiveConnector {
             if (bookie.key === 'onexbet') targetBookmaker = '1xBet Ghana';
             else if (bookie.key === 'betway') targetBookmaker = 'Betway Ghana';
             if (!targetBookmaker) continue;
+
+            if (seenEventIds[targetBookmaker].has(ev.id)) continue;
+            seenEventIds[targetBookmaker].add(ev.id);
 
             const markets = [];
 

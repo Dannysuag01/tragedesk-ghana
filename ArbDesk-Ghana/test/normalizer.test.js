@@ -126,3 +126,23 @@ test('rejects matches when sports differ', () => {
   assert.strictEqual(isMatchEqual(fixtureA, fixtureB), false);
 });
 
+test('accepts matches when one bookmaker specifies Football and another specifies Soccer', () => {
+  const fixtureA = {
+    homeTeam: 'Arsenal',
+    awayTeam: 'Chelsea',
+    sport: 'Football',
+    competition: 'Premier League',
+    startTime: '2026-11-21T17:30:00Z'
+  };
+  const fixtureB = {
+    homeTeam: 'Arsenal FC',
+    awayTeam: 'Chelsea FC',
+    sport: 'Soccer',
+    competition: 'Premier League',
+    startTime: '2026-11-21T17:30:00Z'
+  };
+
+  assert.strictEqual(isMatchEqual(fixtureA, fixtureB), true);
+});
+
+

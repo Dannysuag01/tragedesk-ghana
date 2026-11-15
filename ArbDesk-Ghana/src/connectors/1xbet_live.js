@@ -49,11 +49,11 @@ export class OneXBetLiveConnector extends BaseBookmaker {
    */
   async _fetchEventIds() {
     const endpoints = [
-      `${this.baseUrl}/LineFeed/Get1x2_Zip?sports=1,2,3,4,10&count=50&lng=en&mode=4`,
+      `${this.baseUrl}/LineFeed/Get1x2_Zip?sports=1,2,3,4,10&count=200&lng=en&mode=4`,
       `${this.baseUrl}/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
-      `${this.baseUrl}/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`,
+      `${this.baseUrl}/LineFeed/Get1x2_3?SportId=1&Count=200&lng=en&tf=10800&tz=0`,
       `${this.baseUrl}/service-api/LineFeed/GetSportsZip?sports=1,2,3,4,10&lng=en&tf=10800&tz=0&country=97&gr=176`,
-      `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=50&lng=en&tf=10800&tz=0`
+      `${this.baseUrl}/service-api/LineFeed/Get1x2_3?SportId=1&Count=200&lng=en&tf=10800&tz=0`
     ];
 
     let htmlCount = 0;

@@ -133,6 +133,11 @@ const COUNTRY_ALIASES = {
 const COMP_ALIASES = {
   'epl': 'premier league',
   'english premier league': 'premier league',
+  'npfl': 'nigeria professional league',
+  'nigeria professional football league': 'nigeria professional league',
+  'nigeria professional league': 'nigeria professional league',
+  'ghpl': 'ghana premier league',
+  'ghana premier league': 'ghana premier league',
   'laliga': 'primera division',
   'la liga': 'primera division',
   'spain laliga': 'primera division',
@@ -145,6 +150,25 @@ const COMP_ALIASES = {
 };
 
 /**
+ * Normalizes sport names to canonical IDs
+ * @param {string} sport
+ * @returns {string}
+ */
+export function normalizeSportName(sport) {
+  if (!sport) return '';
+  const s = String(sport).toLowerCase().trim();
+  if (s.includes('soccer') || s.includes('football')) return 'football';
+  if (s.includes('basket')) return 'basketball';
+  if (s.includes('table tennis') || s.includes('ping pong')) return 'table_tennis';
+  if (s.includes('tennis')) return 'tennis';
+  if (s.includes('hockey') || s.includes('ice hockey')) return 'ice_hockey';
+  if (s.includes('cricket')) return 'cricket';
+  if (s.includes('rugby')) return 'rugby';
+  if (s.includes('baseball')) return 'baseball';
+  return s;
+}
+
+/**
  * Verifies if two competition / league representations are compatible
  * @param {string} [compA]
  * @param {string} [compB]
@@ -152,7 +176,7 @@ const COMP_ALIASES = {
  * @param {string} [countryB]
  * @returns {boolean}
  */
-export function isCompetitionCompatible(compA = '', compB = '', countryA = '', countryB = '') {
+export function isCompetitionCompatible(compA = '', compB = '', countryA = '', countryB = '', relaxed = false) {
   // 1. Country conflict check
   if (countryA && countryB) {
     const rawCA = countryA.toLowerCase().trim();
@@ -177,7 +201,8 @@ export function isCompetitionCompatible(compA = '', compB = '', countryA = '', c
   }
 
   // If either is generic placeholder
-  if (normA === 'football' || normB === 'football' || normA === 'soccer' || normB === 'soccer' || normA.length === 0 || normB.length === 0) {
+  const genericComps = ['football', 'soccer', 'upcoming', 'sports', 'all', 'matches', 'top leagues'];
+  if (genericComps.some(g => normA === g || normB === g || normA.includes(g) || normB.includes(g)) || normA.length === 0 || normB.length === 0) {
     return true;
   }
 
@@ -211,6 +236,11 @@ export function isCompetitionCompatible(compA = '', compB = '', countryA = '', c
     }
   }
 
+  // When teams match strongly across worldwide leagues, don't reject due to token abbreviations
+  if (relaxed) {
+    return true;
+  }
+
   // 4. Token Overlap Check
   const stopWords = new Set(['league', 'cup', 'the', 'fc', 'championship', 'tournament', 'division']);
   const tokensA = new Set(normA.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w)));
@@ -242,9 +272,9 @@ export function isMatchEqual(fixtureA, fixtureB, threshold = 0.70) {
 
   // 0. Sport Verification (Reject if both specify different sports)
   if (fixtureA.sport && fixtureB.sport) {
-    const sA = fixtureA.sport.toLowerCase().trim();
-    const sB = fixtureB.sport.toLowerCase().trim();
-    if (sA !== sB && !sA.includes(sB) && !sB.includes(sA)) {
+    const sA = normalizeSportName(fixtureA.sport);
+    const sB = normalizeSportName(fixtureB.sport);
+    if (sA && sB && sA !== sB) {
       return false;
     }
   }
@@ -284,17 +314,7 @@ export function isMatchEqual(fixtureA, fixtureB, threshold = 0.70) {
     }
   }
 
-  // 3. League / Competition Verification
-  const compA = fixtureA.competition || fixtureA.tournamentName || fixtureA.league;
-  const compB = fixtureB.competition || fixtureB.tournamentName || fixtureB.league;
-  const countryA = fixtureA.country || fixtureA.region;
-  const countryB = fixtureB.country || fixtureB.region;
-
-  if (!isCompetitionCompatible(compA, compB, countryA, countryB)) {
-    return false;
-  }
-
-  // 4. Team Name Similarity Verification
+  // 3. Team Name Similarity Verification
   const cleanHomeA = cleanTeamName(fixtureA.homeTeam);
   const cleanHomeB = cleanTeamName(fixtureB.homeTeam);
   const cleanAwayA = cleanTeamName(fixtureA.awayTeam);
@@ -304,5 +324,21 @@ export function isMatchEqual(fixtureA, fixtureB, threshold = 0.70) {
   const awaySim = stringSimilarity(cleanAwayA, cleanAwayB);
 
   // Both teams must match reasonably well
-  return (homeSim >= threshold && awaySim >= threshold);
+  if (homeSim < threshold || awaySim < threshold) {
+    return false;
+  }
+
+  // 4. League / Competition Verification
+  const compA = fixtureA.competition || fixtureA.tournamentName || fixtureA.league;
+  const compB = fixtureB.competition || fixtureB.tournamentName || fixtureB.league;
+  const countryA = fixtureA.country || fixtureA.region;
+  const countryB = fixtureB.country || fixtureB.region;
+
+  // When both teams match strongly (>= 0.80), allow relaxed competition check across worldwide leagues
+  const isHighTeamMatch = (homeSim >= 0.80 && awaySim >= 0.80);
+  if (!isCompetitionCompatible(compA, compB, countryA, countryB, isHighTeamMatch)) {
+    return false;
+  }
+
+  return true;
 }
